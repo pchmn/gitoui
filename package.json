@@ -1,0 +1,35 @@
+{
+  "name": "gitoui",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.28.1",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "test": "turbo test",
+    "check-types": "turbo check-types",
+    "lint": "biome check .",
+    "check": "biome check --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.16",
+    "@release-it-plugins/workspaces": "5.0.3",
+    "@release-it/conventional-changelog": "^10.0.4",
+    "@types/node": "^24.13.0",
+    "@typescript/native-preview": "7.0.0-dev.20260604.1",
+    "release-it": "^19.2.4",
+    "turbo": "2.9.16",
+    "typescript": "6.0.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild",
+      "@swc/core"
+    ]
+  }
+}

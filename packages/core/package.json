@@ -1,0 +1,25 @@
+{
+  "name": "@gitoui/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./GitClient": "./src/GitClient.ts",
+    "./RepoWatcher": "./src/RepoWatcher.ts",
+    "./runGit": "./src/runGit.ts"
+  },
+  "scripts": {
+    "check-types": "tsgo --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@gitoui/contracts": "workspace:*",
+    "effect": "catalog:",
+    "simple-git": "3.36.0"
+  },
+  "devDependencies": {
+    "@gitoui/tsconfig": "workspace:*",
+    "@effect/vitest": "catalog:",
+    "vitest": "catalog:"
+  }
+}

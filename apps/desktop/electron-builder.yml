@@ -1,0 +1,13 @@
+appId: com.gitoui.desktop
+productName: gitoui
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**
+mac:
+  target: dmg
+win:
+  target: nsis
+linux:
+  target: AppImage

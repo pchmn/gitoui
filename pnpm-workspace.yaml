@@ -1,0 +1,20 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# Single source of truth for shared dependency versions (pinned across all packages).
+# Critical for `effect`: contracts/core/desktop MUST resolve the identical version or
+# Schema type identity breaks across the IPC boundary.
+catalog:
+  effect: 3.21.2
+  "@effect/vitest": 0.29.0
+  vitest: ^3.2.0 # pinned to v3: @effect/vitest@0.29 peer-requires vitest ^3.2 (not v4)
+  "@tanstack/react-router": 1.170.11
+  "@tanstack/react-query": 5.101.0
+  "@tanstack/react-db": 0.1.85
+  react: 19.2.7
+  react-dom: 19.2.7
+  "@types/react": 19.2.16
+  "@types/react-dom": 19.2.3
+  tailwindcss: 4.3.0
+  "@tailwindcss/vite": 4.3.0

@@ -1,0 +1,20 @@
+{
+  "name": "@gitoui/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./define": "./src/define.ts",
+    "./git": "./src/git.ts",
+    "./desktop": "./src/desktop.ts"
+  },
+  "scripts": {
+    "check-types": "tsgo --noEmit"
+  },
+  "dependencies": {
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@gitoui/tsconfig": "workspace:*"
+  }
+}

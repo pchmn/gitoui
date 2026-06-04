@@ -1,0 +1,12 @@
+{
+  "extends": "@gitoui/tsconfig/react.json",
+  "compilerOptions": {
+    "composite": true,
+    "types": ["vite/client"]
+  },
+  // `src/ipc/channels.ts` is node-side, but the renderer's `global.d.ts` imports the preload's
+  // types, and the preload value-imports CHANNELS — so the web project must resolve this one file.
+  // It is Schema-free with zero imports, so it pulls nothing into web. See docs/adr/0004.
+  // Do NOT add other `src/ipc/*` files here: they import electron/core and would break the web build.
+  "include": ["src/renderer", "src/ipc/channels.ts"]
+}

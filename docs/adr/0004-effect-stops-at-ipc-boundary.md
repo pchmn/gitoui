@@ -2,6 +2,8 @@
 
 Effect lives in `core` and `main` (the typed git engine + IPC handlers); the renderer is **100% React + TanStack Router/Query/DB** and receives only plain data. We deliberately do **not** go full-Effect on the renderer (`@effect-atom/atom-react`).
 
+The **preload** sits on the renderer-facing side of this line: its only job is to forward payloads and unwrap the 3-case envelope (decode/encode happen in `main`), so it stays **Schema-free at runtime** (`import type` only). Consequently any artifact it shares with `main` — e.g. the IPC **channel names** (`apps/desktop/src/ipc/channels.ts`) — is **plain data, never a `Schema`**: a runtime `Schema` would pull `effect` into the preload bundle and block the planned `sandbox: true` hardening (see `apps/desktop/src/main/index.ts`).
+
 Rationale: a git UI's data — normalized entities with many derived/joined/filtered views and large virtualized lists — is *made* for TanStack DB's collections + incremental live queries. An atom system is reactive cells, **not** a relational store, so full-Effect would mean hand-rolling the UI data layer and dropping TanStack DB. Learning **both**, each where it is the best tool, is an explicit goal of the project.
 
 ## Considered options

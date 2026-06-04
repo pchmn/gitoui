@@ -1,0 +1,37 @@
+{
+  "name": "@gitoui/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "build:app": "electron-vite build && electron-builder",
+    "start": "electron-vite preview",
+    "check-types": "tsgo --build --noEmit tsconfig.json"
+  },
+  "dependencies": {
+    "@gitoui/contracts": "workspace:*",
+    "@gitoui/core": "workspace:*",
+    "@gitoui/ui": "workspace:*",
+    "@tanstack/react-db": "catalog:",
+    "@tanstack/react-query": "catalog:",
+    "@tanstack/react-router": "catalog:",
+    "effect": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:"
+  },
+  "devDependencies": {
+    "@gitoui/tsconfig": "workspace:*",
+    "@tailwindcss/vite": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "42.3.3",
+    "electron-builder": "26.8.1",
+    "electron-vite": "5.0.0",
+    "tailwindcss": "catalog:",
+    "vite": "^7.0.0"
+  }
+}

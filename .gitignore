@@ -1,0 +1,16 @@
+node_modules/
+dist/
+out/
+dist-electron/
+release/
+.turbo/
+coverage/
+.vite/
+*.tsbuildinfo
+*.log
+*.local
+.DS_Store
+
+# Agent tooling: share .agents/ (skills, commands) + the .claude → .agents symlink,
+# but keep per-machine settings local.
+.agents/settings.local.json
