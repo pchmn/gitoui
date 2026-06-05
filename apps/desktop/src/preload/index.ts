@@ -33,6 +33,9 @@ const git = {
 };
 
 const desktop = {
+  // Static shell info, known at preload load — exposed as a plain value, not an IPC method.
+  // The renderer uses it to reserve space for the macOS traffic lights in its topbar.
+  platform: process.platform as 'darwin' | 'win32' | 'linux',
   pickRepository: (): Promise<string | null> =>
     invoke(CHANNELS.desktop.pickRepository) as Promise<string | null>,
 };
