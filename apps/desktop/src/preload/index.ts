@@ -1,6 +1,6 @@
 import type { RepoInput, Status } from '@gitoui/contracts/git';
 import { contextBridge, ipcRenderer } from 'electron';
-import { CHANNELS } from '../ipc/channels.ts';
+import { CHANNELS } from '#ipc/channels';
 
 // Unwrap the 3-case envelope: return the value on Success, THROW the typed error on Failure/Defect
 // (Style A — idiomatic for TanStack Query/DB; the renderer narrows by `_tag`).

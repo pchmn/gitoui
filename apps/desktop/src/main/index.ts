@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { app, BrowserWindow } from 'electron';
-import { registerIpc } from '../ipc/methods.ts';
+import { registerIpc } from '#ipc/methods';
 
 function createWindow(): void {
   const win = new BrowserWindow({

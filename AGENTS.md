@@ -58,4 +58,6 @@ Then check whether docs need updating to reflect your change:
 - Effect (stable v3). Services via `Context.Tag`/`Effect.Service` + `Layer`. Typed errors via
   `Schema.TaggedError`. Co-locate `*.test.ts` next to source.
 - Packages export **subpaths, no barrel index** (e.g. `@gitoui/contracts/git`).
+- Intra-package imports use the **`imports` field** (`#…`, e.g. `#ipc/channels`), never tsconfig
+  `paths` — one declaration in `package.json`, honored by tsgo + vite + vitest + Node at once.
 - Conventional commits (release-it squashes to a changelog).
