@@ -15,20 +15,14 @@ type ThemeProviderState = {
   setPrimaryColor: (color: string) => void;
 };
 
-const ThemeProviderContext = createContext<ThemeProviderState | undefined>(
-  undefined,
-);
+const ThemeProviderContext = createContext<ThemeProviderState | undefined>(undefined);
 
 const THEME_STORAGE_KEY = 'local:preferred-theme' as const;
 const PRIMARY_COLOR_STORAGE_KEY = 'local:preferred-primary-color' as const;
 
-export function ThemeProvider({
-  children,
-  defaultTheme = 'system',
-}: ThemeProviderProps) {
+export function ThemeProvider({ children, defaultTheme = 'system' }: ThemeProviderProps) {
   const [theme, setTheme] = useState<Theme>(
-    () =>
-      (localStorage.getItem(THEME_STORAGE_KEY) as Theme | null) ?? defaultTheme,
+    () => (localStorage.getItem(THEME_STORAGE_KEY) as Theme | null) ?? defaultTheme,
   );
   const [primaryColor, setPrimaryColor] = useState(
     () => localStorage.getItem(PRIMARY_COLOR_STORAGE_KEY) ?? DEFAULT_PRIMARY,
@@ -52,18 +46,14 @@ export function ThemeProvider({
       // Initial setup
       handleSystemThemeChange();
 
-      return () =>
-        mediaQuery.removeEventListener('change', handleSystemThemeChange);
+      return () => mediaQuery.removeEventListener('change', handleSystemThemeChange);
     }
 
     root.classList.add(theme);
   }, [theme]);
 
   useEffect(() => {
-    document.documentElement.style.setProperty(
-      '--primary-source',
-      primaryColor,
-    );
+    document.documentElement.style.setProperty('--primary-source', primaryColor);
   }, [primaryColor]);
 
   return (

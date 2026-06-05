@@ -17,7 +17,7 @@ export const PALETTES: Palette[] = [
   { id: 'lavender', primary: '#9e80c8', secondary: '#bea4d4' },
 ];
 
-export const DEFAULT_PRIMARY = '#e8a87c';
+export const DEFAULT_PRIMARY = '#8a6048';
 
 export function getActivePrimary(paletteId: string, customColor: string) {
   if (paletteId === 'custom') return customColor;
