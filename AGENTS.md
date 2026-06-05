@@ -14,6 +14,25 @@ packages/ui           @gitoui/ui — React design system (Base UI + cva/cn + Tai
 packages/tsconfig     @gitoui/tsconfig — shared base.json
 ```
 
+## Design Context
+
+Before any UI/UX work, read [`PRODUCT.md`](./PRODUCT.md) (strategy: register, users, principles)
+and [`DESIGN.md`](./DESIGN.md) (visual system: tokens, typography, components). In short:
+
+- **Register:** product. Personality: **minimal · clear · frictionless**. The **commit graph is
+  the protagonist**; chrome recedes around it.
+- **Theme is source-derived.** The whole palette is computed in OKLCH at runtime from one
+  user-chosen source color (`--primary-source`, default brown `#8a6048`). Pull from tokens, never
+  hardcode a grey. Flat at rest (depth via tonal step + 1px hairlines), compact controls, DM Sans
+  for UI (DM Mono for code/diff content only), light + dark equal.
+- **Anti-references:** GitKraken's saturated cockpit; generic SaaS.
+
+For a sense of the overall direction, see the starting mockups in
+[`docs/mockups/`](./docs/mockups/README.md) (target feel, not the final spec — `DESIGN.md` wins
+on any conflict).
+
+The `$impeccable` skill reads these files plus the `.impeccable/design.json` sidecar.
+
 ## Architecture invariants (do not break)
 
 - **Effect stops at the IPC boundary.** `core` + `main` are Effect; the renderer is plain
@@ -52,6 +71,10 @@ Then check whether docs need updating to reflect your change:
   synonym for something already named (e.g. it's "Working tree", never "working directory").
 - `docs/decisions.md` + `docs/adr/` — if you made a decision that is hard to reverse, surprising
   without context, and the result of a real trade-off, record it (add an ADR; bump the number).
+- `PRODUCT.md` / `DESIGN.md` / `.impeccable/design.json` — if you changed the visual system (tokens,
+  typography, components, named rules) or the mockups in `docs/mockups/`. `DESIGN.md` is the SSOT;
+  the `.impeccable/design.json` sidecar mirrors it, so keep the two in sync. When a mockup and
+  `DESIGN.md` disagree, `DESIGN.md` wins.
 
 ## Conventions
 
