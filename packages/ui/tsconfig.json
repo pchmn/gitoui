@@ -1,4 +1,8 @@
 {
   "extends": "@gitoui/tsconfig/react.json",
-  "include": ["src"]
+  "include": ["src"],
+  "compilerOptions": {
+    "moduleResolution": "bundler",
+    "resolvePackageJsonImports": true
+  }
 }
