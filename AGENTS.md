@@ -84,3 +84,19 @@ Then check whether docs need updating to reflect your change:
 - Intra-package imports use the **`imports` field** (`#…`, e.g. `#ipc/channels`), never tsconfig
   `paths` — one declaration in `package.json`, honored by tsgo + vite + vitest + Node at once.
 - Conventional commits (release-it squashes to a changelog).
+
+## Agent skills
+
+### Issue tracker
+
+Issues, PRDs, and triage live in this repo's GitHub Issues (`pchmn/gitoui`), via the `gh` CLI. See
+`docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Five canonical triage states using default label strings (`needs-triage`, `needs-info`,
+`ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
