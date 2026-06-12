@@ -9,6 +9,7 @@
  */
 export const CHANNELS = {
   git: {
+    resolveRepository: 'git:resolveRepository',
     status: 'git:status',
     watchStatus: 'git:watchStatus',
   },

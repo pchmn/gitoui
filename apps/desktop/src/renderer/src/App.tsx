@@ -1,39 +1,23 @@
-import { Button } from '@gitoui/ui/button';
-import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useActiveRepository } from './active-repository';
+import { EmptyState } from './components/EmptyState';
+import { RepositoryView } from './components/RepositoryView';
+import { StatusBar } from './components/StatusBar';
 import { TopBar } from './components/TopBar';
 
+/**
+ * The vertical app shell (epic decision 8): frameless top bar, a flexible content region, and the
+ * minimal status bar pinned to the bottom. No 3-column split yet — that lands with the graph tranche.
+ */
 export function App() {
-  const [repoPath, setRepoPath] = useState<string | null>(null);
-
-  // `queryFn` throws on Failure/Defect (Style A) → surfaces as `status.error`.
-  const status = useQuery({
-    queryKey: ['status', repoPath],
-    queryFn: () => window.git.status({ repoPath: repoPath as string }),
-    enabled: repoPath !== null,
-  });
-
-  console.log('status', status.data);
-
-  async function openRepository() {
-    const picked = await window.desktop.pickRepository();
-    if (picked) setRepoPath(picked);
-  }
+  const { root } = useActiveRepository();
 
   return (
-    <div className='flex h-screen flex-col'>
+    <div className='flex h-screen flex-col bg-background text-foreground'>
       <TopBar />
-      <main className='flex-1 space-y-4 overflow-auto p-6'>
-        <h1 className='text-xl font-semibold'>gitoui</h1>
-        <Button onClick={openRepository}>Open repository</Button>
-        {repoPath && <p className='text-sm text-neutral-500'>{repoPath}</p>}
-        {status.isError && <p className='text-sm text-red-600'>Failed to load status</p>}
-        {status.data && (
-          <p className='text-sm'>
-            On branch <strong>{status.data.branch}</strong> · {status.data.entries.length} change(s)
-          </p>
-        )}
+      <main className='min-h-0 flex-1 overflow-auto'>
+        {root === null ? <EmptyState /> : <RepositoryView root={root} />}
       </main>
+      <StatusBar />
     </div>
   );
 }

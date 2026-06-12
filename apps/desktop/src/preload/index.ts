@@ -1,4 +1,9 @@
-import type { RepoInput, Status } from '@gitoui/contracts/git';
+import type {
+  RepoInput,
+  ResolvedRepository,
+  ResolveRepositoryInput,
+  Status,
+} from '@gitoui/contracts/git';
 import { contextBridge, ipcRenderer } from 'electron';
 import { CHANNELS } from '#ipc/channels';
 
@@ -26,6 +31,8 @@ function subscribe(channel: string, payload: unknown, onEvent: (msg: unknown) =>
 }
 
 const git = {
+  resolveRepository: (input: ResolveRepositoryInput): Promise<ResolvedRepository> =>
+    invoke(CHANNELS.git.resolveRepository, input) as Promise<ResolvedRepository>,
   status: (input: RepoInput): Promise<Status> =>
     invoke(CHANNELS.git.status, input) as Promise<Status>,
   watchStatus: (input: RepoInput, onEvent: (msg: unknown) => void): (() => void) =>

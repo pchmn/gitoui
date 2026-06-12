@@ -1,8 +1,10 @@
 import { ThemeProvider } from '@gitoui/ui/theme-provider';
+import { Toaster, ToastProvider } from '@gitoui/ui/toast';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.tsx';
+import { ActiveRepositoryProvider } from './active-repository.tsx';
 import '@gitoui/ui/globals.css';
 import './index.css';
 
@@ -16,7 +18,12 @@ createRoot(root).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <App />
+        <ToastProvider>
+          <ActiveRepositoryProvider>
+            <App />
+          </ActiveRepositoryProvider>
+          <Toaster />
+        </ToastProvider>
       </ThemeProvider>
     </QueryClientProvider>
   </StrictMode>,

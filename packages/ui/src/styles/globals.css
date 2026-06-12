@@ -49,6 +49,10 @@
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
   --font-sans: "DM Sans Variable", sans-serif;
+
+  /* The one sanctioned shadow (DESIGN.md §4): true overlays only — popovers, menus, toasts.
+     Soft, ≤16px blur, tinted with Ink (derived from the source) and never pure black. */
+  --shadow-overlay: 0 4px 16px -4px oklch(from var(--primary-source) 0.18 calc(c * 0.2) h / 0.18);
 }
 
 :root {
