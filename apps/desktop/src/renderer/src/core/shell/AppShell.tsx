@@ -1,14 +1,14 @@
-import { useActiveRepository } from './active-repository';
-import { EmptyState } from './components/EmptyState';
-import { RepositoryView } from './components/RepositoryView';
-import { StatusBar } from './components/StatusBar';
-import { TopBar } from './components/TopBar';
+import { useActiveRepository } from '#renderer/modules/repository/ActiveRepositoryContext';
+import { EmptyState } from '#renderer/modules/repository/EmptyState';
+import { RepositoryView } from '#renderer/modules/repository/RepositoryView';
+import { StatusBar } from './StatusBar';
+import { TopBar } from './TopBar';
 
 /**
  * The vertical app shell (epic decision 8): frameless top bar, a flexible content region, and the
  * minimal status bar pinned to the bottom. No 3-column split yet — that lands with the graph tranche.
  */
-export function App() {
+export function AppShell() {
   const { root } = useActiveRepository();
 
   return (

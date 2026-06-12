@@ -1,7 +1,7 @@
 import { cn } from '@gitoui/ui/lib/utils';
-import { GitBranch } from '@phosphor-icons/react';
+import { GitBranchIcon } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
-import { useActiveRepository } from '../active-repository';
+import { useActiveRepository } from '#renderer/modules/repository/ActiveRepositoryContext';
 
 /**
  * Slim Surface bar pinned to the bottom (DESIGN §5). Reflects the active Repository's live `status`:
@@ -27,7 +27,7 @@ export function StatusBar() {
         ) : status.data ? (
           <>
             <span className='flex items-center gap-1 text-foreground'>
-              <GitBranch className='size-3 shrink-0' />
+              <GitBranchIcon className='size-3 shrink-0' />
               <span className='truncate'>{status.data.branch}</span>
             </span>
             {(status.data.ahead > 0 || status.data.behind > 0) && (

@@ -1,6 +1,6 @@
 import { Button } from '@gitoui/ui/button';
-import { FolderOpen } from '@phosphor-icons/react';
-import { useOpenRepository } from '../hooks/use-open-repository';
+import { FolderOpenIcon } from '@phosphor-icons/react';
+import { useOpenRepository } from './useOpenRepository';
 
 /**
  * The content region for an active Repository. A quiet placeholder for now — the commit graph (the
@@ -20,7 +20,7 @@ export function RepositoryView({ root }: { root: string }) {
         </p>
       </div>
       <Button variant='outline' onClick={openRepository} disabled={isOpening}>
-        <FolderOpen data-icon='inline-start' />
+        <FolderOpenIcon data-icon='inline-start' />
         Open another repository…
       </Button>
     </div>

@@ -78,12 +78,10 @@ Then check whether docs need updating to reflect your change:
 
 ## Conventions
 
-- Effect (stable v3). Services via `Context.Tag`/`Effect.Service` + `Layer`. Typed errors via
-  `Schema.TaggedError`. Co-locate `*.test.ts` next to source.
-- Packages export **subpaths, no barrel index** (e.g. `@gitoui/contracts/git`).
-- Intra-package imports use the **`imports` field** (`#…`, e.g. `#ipc/channels`), never tsconfig
-  `paths` — one declaration in `package.json`, honored by tsgo + vite + vitest + Node at once.
-- Conventional commits (release-it squashes to a changelog).
+How code is organized, named, and imported — TypeScript/Effect idioms, the feature-first renderer
+layout (`core / modules / shared`), per-package naming, the `#renderer/*` alias, Phosphor icons,
+conventional commits — lives in **[`docs/conventions.md`](./docs/conventions.md)**. The architecture
+invariants above are the do-not-break rules; conventions are everything else.
 
 ## Agent skills
 

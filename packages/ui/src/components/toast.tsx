@@ -1,5 +1,5 @@
 import { Toast as ToastPrimitive } from '@base-ui/react/toast';
-import { WarningCircle, X } from '@phosphor-icons/react';
+import { WarningCircleIcon, XIcon } from '@phosphor-icons/react';
 import { cn } from '#lib/utils';
 
 /**
@@ -42,7 +42,7 @@ function ToastList() {
       )}
     >
       {t.type === 'error' && (
-        <WarningCircle weight='fill' className='mt-px size-4 shrink-0 text-destructive' />
+        <WarningCircleIcon weight='fill' className='mt-px size-4 shrink-0 text-destructive' />
       )}
       <div className='min-w-0 flex-1'>
         {t.title && (
@@ -56,7 +56,7 @@ function ToastList() {
         aria-label='Close'
         className='-mt-0.5 -mr-1 flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30'
       >
-        <X className='size-3' />
+        <XIcon className='size-3' />
       </ToastPrimitive.Close>
     </ToastPrimitive.Root>
   ));
