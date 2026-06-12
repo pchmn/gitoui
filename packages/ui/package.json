@@ -13,6 +13,8 @@
     "./lib/*": "./src/lib/*.ts",
     "./hooks/*": "./src/hooks/*.ts",
     "./button": "./src/components/button.tsx",
+    "./combobox": "./src/components/combobox.tsx",
+    "./identity-avatar": "./src/components/identity-avatar.tsx",
     "./toast": "./src/components/toast.tsx",
     "./theme-provider": "./src/components/theme/theme-provider.tsx"
   },
