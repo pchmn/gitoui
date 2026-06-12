@@ -7,7 +7,16 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!**/dist", "!**/out", "!**/dist-electron", "!**/release", "!**/*.gen.ts"]
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/out",
+      "!**/dist-electron",
+      "!**/release",
+      "!**/*.gen.ts",
+      "!**/impeccable",
+      "!**/.impeccable"
+    ]
   },
   "formatter": {
     "enabled": true,

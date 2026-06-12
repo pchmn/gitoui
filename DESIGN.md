@@ -320,6 +320,14 @@ rail collapses to icons; the layout is responsive structurally, never via fluid 
 - Branch / tag markers as small `rounded-sm` Micro-text pills on Accent Surface; the active branch
   and special states (WIP, HEAD) take a stronger tint. Tiny, quiet, scannable.
 
+### Toasts
+The app's transient feedback / error surface, stacked bottom-right. A true overlay, so it earns the
+one **Overlay** shadow (Elevation §4): a Surface (`popover`) fill, 1px Hairline, `rounded-lg`, Label
+title + Muted-Ink description, and a ghost close affordance. It slides in from the right and
+auto-dismisses. Color is **spent only on state** (the Spent Color Rule): an `alert`-tinted glyph
+flags an `error` toast; a plain toast carries none. Reserve toasts for things the user must notice
+out-of-band (a failed *Open repository*, a sync error) — not routine confirmations.
+
 ### The Inspector — Changes & Tree
 The right panel is one tabbed surface with two modes:
 - **Changes:** Staged and Unstaged groups, each a dense list of file rows at Label size. Every row

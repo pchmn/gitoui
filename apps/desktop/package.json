@@ -6,7 +6,8 @@
   "main": "out/main/index.js",
   "imports": {
     "#ipc/*": "./src/ipc/*.ts",
-    "#preload/*": "./src/preload/*.ts"
+    "#preload/*": "./src/preload/*.ts",
+    "#renderer/*": "./src/renderer/src/*"
   },
   "scripts": {
     "dev": "electron-vite dev",
@@ -19,6 +20,7 @@
     "@gitoui/contracts": "workspace:*",
     "@gitoui/core": "workspace:*",
     "@gitoui/ui": "workspace:*",
+    "@phosphor-icons/react": "catalog:",
     "@tanstack/react-db": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-router": "catalog:",

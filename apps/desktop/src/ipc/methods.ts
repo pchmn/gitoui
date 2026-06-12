@@ -10,6 +10,13 @@ import { makeIpcMethod, makeIpcSubscription } from './registry.ts';
 /** Mount every IPC channel. Called once on app ready. */
 export function registerIpc(): void {
   // --- window.git.* — backed by @gitoui/core ---
+  makeIpcMethod(CHANNELS.git.resolveRepository, gitContract.resolveRepository, (payload) =>
+    GitClient.pipe(
+      Effect.flatMap((git) => git.resolveRepository(payload.path)),
+      Effect.provide(GitClient.Default),
+    ),
+  );
+
   makeIpcMethod(CHANNELS.git.status, gitContract.status, (payload) =>
     GitClient.pipe(
       Effect.flatMap((git) => git.status(payload.repoPath)),

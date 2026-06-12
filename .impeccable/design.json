@@ -79,6 +79,14 @@
       "css": ".ds-ref-pill{display:inline-flex;align-items:center;height:16px;padding:0 6px;margin-right:6px;font-family:'DM Sans Variable',sans-serif;font-size:.625rem;font-weight:500;letter-spacing:.01em;color:oklch(0.180 0.0131 50.6);background:oklch(0.930 0.0197 50.6);border-radius:.3rem;}.ds-ref-pill--wip{color:oklch(0.970 0.0033 50.6);background:oklch(0.577 0.245 27.325);}"
     },
     {
+      "name": "Toast",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Transient feedback / error surface, bottom-right. A true overlay: Surface fill, 1px Hairline, the one Overlay shadow. Color spent only on state — an alert glyph flags an error toast. Reserve for out-of-band notices, not routine confirmations.",
+      "html": "<div class=\"ds-toast ds-toast--error\"><svg class=\"ds-toast__icon\" width=\"16\" height=\"16\" viewBox=\"0 0 256 256\" fill=\"currentColor\"><path d=\"M128 24a104 104 0 1 0 104 104A104 104 0 0 0 128 24Zm-8 56a8 8 0 0 1 16 0v56a8 8 0 0 1-16 0Zm8 104a12 12 0 1 1 12-12 12 12 0 0 1-12 12Z\"/></svg><div class=\"ds-toast__body\"><div class=\"ds-toast__title\">Could not open repository</div><div class=\"ds-toast__desc\">/Users/me/notes is not a git repository.</div></div><button class=\"ds-toast__close\" aria-label=\"Close\"><svg width=\"12\" height=\"12\" viewBox=\"0 0 256 256\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"24\" stroke-linecap=\"round\"><line x1=\"56\" y1=\"56\" x2=\"200\" y2=\"200\"/><line x1=\"200\" y1=\"56\" x2=\"56\" y2=\"200\"/></svg></button></div>",
+      "css": ".ds-toast{display:flex;align-items:flex-start;gap:8px;width:22rem;padding:12px;font-family:'DM Sans Variable',sans-serif;color:oklch(0.180 0.0131 50.6);background:oklch(0.990 0.0098 50.6);border:1px solid oklch(0.900 0.0164 50.6);border-radius:.5rem;box-shadow:0 4px 16px -4px oklch(0.18 0.013 50.6 / 0.18);}.ds-toast__icon{flex:none;margin-top:1px;color:oklch(0.577 0.245 27.325);}.ds-toast__body{min-width:0;flex:1;}.ds-toast__title{font-size:.75rem;font-weight:500;line-height:1.6;}.ds-toast__desc{margin-top:2px;font-size:.75rem;line-height:1.4;color:oklch(0.500 0.0197 50.6);}.ds-toast__close{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;margin:-2px -4px 0 0;flex:none;border:0;border-radius:.3rem;background:transparent;color:oklch(0.500 0.0197 50.6);cursor:pointer;}.ds-toast__close:hover{background:oklch(0.950 0.0131 50.6);color:oklch(0.180 0.0131 50.6);}"
+    },
+    {
       "name": "Change Row",
       "kind": "custom",
       "refersTo": null,
