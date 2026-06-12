@@ -40,3 +40,15 @@ export function touchRecent(
   const others = list.filter((entry) => entry.path !== path);
   return [{ path, lastOpenedAt: now }, ...others].sort(byMostRecent);
 }
+
+/**
+ * Drop a recent by its canonical path, returning the MRU-ordered remainder. A no-op when the path
+ * isn't present. This is the ONLY way an entry leaves the list (issue #10): a failed resolve never
+ * evicts (decision #7) — an unmounted drive may come back — so removal is always an explicit action.
+ */
+export function removeRecent(
+  list: readonly RecentRepository[],
+  path: string,
+): readonly RecentRepository[] {
+  return list.filter((entry) => entry.path !== path).sort(byMostRecent);
+}
