@@ -4,6 +4,7 @@ import { GitClient } from '@gitoui/core/GitClient';
 import { RepoWatcher } from '@gitoui/core/RepoWatcher';
 import { Effect, Stream } from 'effect';
 import { dialog } from 'electron';
+import { RecentRepositoriesStore } from '../main/RecentRepositoriesStore.ts';
 import { CHANNELS } from './channels.ts';
 import { makeIpcMethod, makeIpcSubscription } from './registry.ts';
 
@@ -39,5 +40,22 @@ export function registerIpc(): void {
       const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
       return result.canceled ? null : (result.filePaths[0] ?? null);
     }),
+  );
+
+  makeIpcMethod(CHANNELS.desktop.recentRepositories, desktopContract.recentRepositories, () =>
+    RecentRepositoriesStore.pipe(
+      Effect.flatMap((store) => store.list()),
+      Effect.provide(RecentRepositoriesStore.Default),
+    ),
+  );
+
+  makeIpcMethod(
+    CHANNELS.desktop.addRecentRepository,
+    desktopContract.addRecentRepository,
+    (payload) =>
+      RecentRepositoriesStore.pipe(
+        Effect.flatMap((store) => store.add(payload.path)),
+        Effect.provide(RecentRepositoriesStore.Default),
+      ),
   );
 }
