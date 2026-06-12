@@ -1,4 +1,8 @@
-import type { AddRecentRepositoryInput, RecentRepository } from '@gitoui/contracts/desktop';
+import type {
+  AddRecentRepositoryInput,
+  RecentRepository,
+  RemoveRecentRepositoryInput,
+} from '@gitoui/contracts/desktop';
 import type {
   RepoInput,
   ResolvedRepository,
@@ -50,6 +54,10 @@ const desktop = {
     invoke(CHANNELS.desktop.recentRepositories) as Promise<readonly RecentRepository[]>,
   addRecentRepository: (input: AddRecentRepositoryInput): Promise<readonly RecentRepository[]> =>
     invoke(CHANNELS.desktop.addRecentRepository, input) as Promise<readonly RecentRepository[]>,
+  removeRecentRepository: (
+    input: RemoveRecentRepositoryInput,
+  ): Promise<readonly RecentRepository[]> =>
+    invoke(CHANNELS.desktop.removeRecentRepository, input) as Promise<readonly RecentRepository[]>,
 };
 
 contextBridge.exposeInMainWorld('git', git);

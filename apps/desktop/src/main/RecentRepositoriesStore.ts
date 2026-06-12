@@ -1,7 +1,7 @@
 import type { RecentRepository } from '@gitoui/contracts/desktop';
 import { Effect } from 'effect';
 import Store from 'electron-store';
-import { parseRecents, touchRecent } from './recents.ts';
+import { parseRecents, removeRecent, touchRecent } from './recents.ts';
 
 type RecentsBlob = { recentRepositories: readonly RecentRepository[] };
 
@@ -30,6 +30,14 @@ export class RecentRepositoriesStore extends Effect.Service<RecentRepositoriesSt
         add: (path: string): Effect.Effect<readonly RecentRepository[]> =>
           Effect.sync(() => {
             const next = touchRecent(read(), path, Date.now());
+            store.set('recentRepositories', next);
+            return next;
+          }),
+
+        /** Drop by canonical path, persist, return the new MRU list. */
+        remove: (path: string): Effect.Effect<readonly RecentRepository[]> =>
+          Effect.sync(() => {
+            const next = removeRecent(read(), path);
             store.set('recentRepositories', next);
             return next;
           }),

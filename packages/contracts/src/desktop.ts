@@ -34,6 +34,10 @@ export type RecentRepositories = typeof RecentRepositories.Type;
 export const AddRecentRepositoryInput = Schema.Struct({ path: Schema.String });
 export type AddRecentRepositoryInput = typeof AddRecentRepositoryInput.Type;
 
+/** Removal payload: the canonical path of the entry to drop. */
+export const RemoveRecentRepositoryInput = Schema.Struct({ path: Schema.String });
+export type RemoveRecentRepositoryInput = typeof RemoveRecentRepositoryInput.Type;
+
 /** Read the persisted recents in MRU order. No git is spawned — these are plain stored entries. */
 export const recentRepositories = defineMethod({
   payload: Schema.Void,
@@ -47,6 +51,17 @@ export const recentRepositories = defineMethod({
  */
 export const addRecentRepository = defineMethod({
   payload: AddRecentRepositoryInput,
+  success: RecentRepositories,
+  error: Schema.Never,
+});
+
+/**
+ * Manually drop a recent by canonical path, returning the updated MRU list so the renderer can set
+ * its query data without a refetch (decision #6). The ONLY way an entry leaves the list: a failed
+ * resolve never evicts (decision #7), since an unmounted drive / network mount may come back.
+ */
+export const removeRecentRepository = defineMethod({
+  payload: RemoveRecentRepositoryInput,
   success: RecentRepositories,
   error: Schema.Never,
 });

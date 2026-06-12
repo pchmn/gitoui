@@ -58,4 +58,14 @@ export function registerIpc(): void {
         Effect.provide(RecentRepositoriesStore.Default),
       ),
   );
+
+  makeIpcMethod(
+    CHANNELS.desktop.removeRecentRepository,
+    desktopContract.removeRecentRepository,
+    (payload) =>
+      RecentRepositoriesStore.pipe(
+        Effect.flatMap((store) => store.remove(payload.path)),
+        Effect.provide(RecentRepositoriesStore.Default),
+      ),
+  );
 }

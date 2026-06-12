@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseRecents, touchRecent } from './recents.ts';
+import { parseRecents, removeRecent, touchRecent } from './recents.ts';
 
 describe('parseRecents', () => {
   it('keeps well-formed entries and orders them most-recent first', () => {
@@ -40,5 +40,21 @@ describe('touchRecent', () => {
       { path: '/a', lastOpenedAt: 100 },
     ]);
     expect(next).toHaveLength(2);
+  });
+});
+
+describe('removeRecent', () => {
+  it('drops the matching entry and keeps the rest in MRU order', () => {
+    const list = [
+      { path: '/a', lastOpenedAt: 300 },
+      { path: '/b', lastOpenedAt: 200 },
+      { path: '/c', lastOpenedAt: 100 },
+    ];
+    expect(removeRecent(list, '/b').map((r) => r.path)).toEqual(['/a', '/c']);
+  });
+
+  it('is a no-op when the path is not present', () => {
+    const list = [{ path: '/a', lastOpenedAt: 100 }];
+    expect(removeRecent(list, '/missing')).toEqual(list);
   });
 });

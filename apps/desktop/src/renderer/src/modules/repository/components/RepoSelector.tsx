@@ -10,12 +10,13 @@ import {
 } from '@gitoui/ui/combobox';
 import { IdentityAvatar } from '@gitoui/ui/identity-avatar';
 import { cn } from '@gitoui/ui/lib/utils';
-import { FolderOpenIcon } from '@phosphor-icons/react';
+import { FolderOpenIcon, XIcon } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { useActiveRepository } from '../ActiveRepositoryContext';
 import { useActivateRepository } from '../hooks/useActivateRepository';
 import { useOpenRepository } from '../hooks/useOpenRepository';
 import { useRecentRepositories } from '../hooks/useRecentRepositories';
+import { useRemoveRecentRepository } from '../hooks/useRemoveRecentRepository';
 
 /** The Repository's display name = the basename of its canonical root (epic decision #3). */
 function basename(path: string): string {
@@ -33,6 +34,7 @@ export function RepoSelector() {
   const { root } = useActiveRepository();
   const { data: recents = [] } = useRecentRepositories();
   const { mutate: activate } = useActivateRepository();
+  const { mutate: removeRecent } = useRemoveRecentRepository();
   const { openRepository } = useOpenRepository();
   const [open, setOpen] = useState(false);
 
@@ -77,7 +79,11 @@ export function RepoSelector() {
           {(repo: RecentRepository) => {
             const name = basename(repo.path);
             return (
-              <ComboboxItem key={repo.path} value={repo} className='gap-2.5'>
+              <ComboboxItem
+                key={repo.path}
+                value={repo}
+                className="group gap-2.5 [&[data-highlighted]_[data-slot='combobox-item-indicator']]:hidden"
+              >
                 <IdentityAvatar name={name} seed={repo.path} />
                 <span className='flex min-w-0 flex-col'>
                   <span className='truncate text-foreground'>{name}</span>
@@ -85,6 +91,22 @@ export function RepoSelector() {
                     {repo.path}
                   </span>
                 </span>
+                {/* Manual remove (issue #10): revealed on hover / keyboard highlight, takes the
+                    active check's slot. stopPropagation keeps the click from selecting the row
+                    (which would re-resolve and re-add the very entry we're dropping). */}
+                <button
+                  type='button'
+                  aria-label={`Remove ${name} from recents`}
+                  tabIndex={-1}
+                  className='ml-auto hidden size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground group-data-highlighted:flex hover:bg-muted hover:text-foreground'
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    removeRecent(repo.path);
+                  }}
+                >
+                  <XIcon className='size-3' />
+                </button>
               </ComboboxItem>
             );
           }}

@@ -17,5 +17,6 @@ export const CHANNELS = {
     pickRepository: 'desktop:pickRepository',
     recentRepositories: 'desktop:recentRepositories',
     addRecentRepository: 'desktop:addRecentRepository',
+    removeRecentRepository: 'desktop:removeRecentRepository',
   },
 } as const;

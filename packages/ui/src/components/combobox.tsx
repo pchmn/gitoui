@@ -111,7 +111,10 @@ function ComboboxItem({ className, children, ...props }: ComboboxPrimitive.Item.
       {...props}
     >
       {children}
-      <ComboboxPrimitive.ItemIndicator className='ml-auto flex shrink-0 items-center text-primary'>
+      <ComboboxPrimitive.ItemIndicator
+        data-slot='combobox-item-indicator'
+        className='ml-auto flex shrink-0 items-center text-primary'
+      >
         <CheckIcon className='size-3.5' />
       </ComboboxPrimitive.ItemIndicator>
     </ComboboxPrimitive.Item>
