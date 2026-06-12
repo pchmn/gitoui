@@ -1,6 +1,6 @@
 import { Button } from '@gitoui/ui/button';
 import { FolderOpenIcon, GitBranchIcon } from '@phosphor-icons/react';
-import { useOpenRepository } from './useOpenRepository';
+import { useOpenRepository } from '../hooks/useOpenRepository';
 
 /** Calm, centered first-run state shown while no Repository is active. */
 export function EmptyState() {

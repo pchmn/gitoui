@@ -1,6 +1,6 @@
 import { toast } from '@gitoui/ui/toast';
 import { useCallback, useState } from 'react';
-import { useActiveRepository } from './ActiveRepositoryContext';
+import { useActiveRepository } from '../ActiveRepositoryContext';
 
 /** A failed resolve crosses the IPC boundary as this plain tagged object (Style A re-throw). */
 function isNotARepositoryError(

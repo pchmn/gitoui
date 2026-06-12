@@ -1,6 +1,6 @@
 import { useActiveRepository } from '#renderer/modules/repository/ActiveRepositoryContext';
-import { EmptyState } from '#renderer/modules/repository/EmptyState';
-import { RepositoryView } from '#renderer/modules/repository/RepositoryView';
+import { EmptyState } from '#renderer/modules/repository/components/EmptyState';
+import { RepositoryView } from '#renderer/modules/repository/components/RepositoryView';
 import { StatusBar } from './StatusBar';
 import { TopBar } from './TopBar';
 

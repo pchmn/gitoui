@@ -1,6 +1,6 @@
 import { Button } from '@gitoui/ui/button';
 import { FolderOpenIcon } from '@phosphor-icons/react';
-import { useOpenRepository } from './useOpenRepository';
+import { useOpenRepository } from '../hooks/useOpenRepository';
 
 /**
  * The content region for an active Repository. A quiet placeholder for now — the commit graph (the

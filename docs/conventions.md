@@ -22,17 +22,21 @@ renderer/src/
   core/                    # app-level infrastructure + the shell
     providers.tsx          # query cache, theming, toast surface — module-agnostic
     shell/                 # the always-present app frame: AppShell, TopBar, StatusBar
-  modules/<feature>/       # vertical feature slices, kept flat
-    repository/            # ActiveRepositoryContext, useOpenRepository, EmptyState, RepositoryView
+  modules/<feature>/       # vertical feature slices, grouped by kind inside
+    repository/
+      components/          # EmptyState, RepositoryView
+      hooks/               # useOpenRepository
+      ActiveRepositoryContext.tsx   # context + types.ts live at the module root
   shared/                  # cross-feature leaf code (components/ hooks/ utils/) — added on first use
 ```
 
 - **`core/`** — infrastructure every feature depends on, plus the **shell** (`core/shell/`), the
   app frame. `core/` is module-agnostic *except* `core/shell/`, which is the composition layer and
   may read feature content (e.g. the StatusBar reads the active-Repository context).
-- **`modules/<feature>/`** — one folder per feature, kept **flat**: its components, hooks, context,
-  and `types.ts` sit side by side. Don't add `components/`/`hooks/` subfolders inside a module until
-  it genuinely needs them.
+- **`modules/<feature>/`** — one folder per feature, with the **same shape every time**: group by
+  kind into `components/` and `hooks/`; the module's **context and `types.ts` live at its root**
+  (they're the shared core, imported by both). Uniform on purpose — no per-module "do we split yet?"
+  call, even when a folder holds a single file.
 - **`shared/`** — reusable across features. Created when the first genuinely-shared thing appears;
   don't pre-create empty folders (git doesn't track them anyway).
 - **Dependency direction**: features depend on `core`/`shared`, never the reverse. The only
@@ -68,7 +72,8 @@ match the app.
   **`imports` field** (`#ipc/*`, `#preload/*`, `#components/*`). The target carries the extension
   (`./src/ipc/*.ts`), so single-extension folders are honored by tsgo + vite + vitest + Node at once.
 - **Renderer** (`apps/desktop`, web side) → a clean, extensionless **`#renderer/*`** alias for
-  **cross-folder** imports; plain relative (`./Sibling`) for **same-folder** siblings.
+  imports that **cross a boundary** (module → module, → `core`, → `shared`); plain **relative**
+  (`./Sibling`, `../hooks/useX`) **within a module**, so a module stays self-contained and movable.
   - The renderer mixes `.ts` and `.tsx` in one folder, so the single-extension `imports`-field
     trick doesn't fit. It is the **one** place that uses **tsconfig `paths`** (`tsconfig.web.json`)
     — for tsgo — while the package.json `imports` field (`#renderer/*`) covers vite (native,
