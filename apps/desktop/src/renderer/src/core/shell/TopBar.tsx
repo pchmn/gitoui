@@ -1,4 +1,5 @@
 import { cn } from '@gitoui/ui/lib/utils';
+import { BranchSelector } from '#renderer/modules/branches/components/BranchSelector';
 import { RepoSelector } from '#renderer/modules/repository/components/RepoSelector';
 
 // macOS overlays the native traffic lights on the top-left; reserve room for them so our
@@ -14,6 +15,7 @@ export function TopBar() {
       )}
     >
       <RepoSelector />
+      <BranchSelector />
     </header>
   );
 }

@@ -4,6 +4,7 @@ import type {
   RemoveRecentRepositoryInput,
 } from '@gitoui/contracts/desktop';
 import type {
+  BranchList,
   RepoInput,
   ResolvedRepository,
   ResolveRepositoryInput,
@@ -42,6 +43,8 @@ const git = {
     invoke(CHANNELS.git.status, input) as Promise<Status>,
   watchStatus: (input: RepoInput, onEvent: (msg: unknown) => void): (() => void) =>
     subscribe(CHANNELS.git.watchStatus, input, onEvent),
+  listBranches: (input: RepoInput): Promise<BranchList> =>
+    invoke(CHANNELS.git.listBranches, input) as Promise<BranchList>,
 };
 
 const desktop = {

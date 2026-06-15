@@ -55,6 +55,28 @@ export type ResolveRepositoryInput = typeof ResolveRepositoryInput.Type;
 export const ResolvedRepository = Schema.Struct({ root: Schema.String });
 export type ResolvedRepository = typeof ResolvedRepository.Type;
 
+export const Branch = Schema.Struct({
+  name: Schema.String,
+  isCurrent: Schema.Boolean,
+  upstream: Schema.optional(Schema.String),
+  ahead: Schema.Number,
+  behind: Schema.Number,
+});
+export type Branch = typeof Branch.Type;
+
+/** Where HEAD points: a local Branch, or a bare Commit (Detached HEAD). */
+export const Head = Schema.Union(
+  Schema.TaggedStruct('OnBranch', { branch: Schema.String }),
+  Schema.TaggedStruct('Detached', { sha: Schema.String }),
+);
+export type Head = typeof Head.Type;
+
+export const BranchList = Schema.Struct({
+  branches: Schema.Array(Branch),
+  head: Head,
+});
+export type BranchList = typeof BranchList.Type;
+
 // --- Contracts (window.git.*) ---
 
 export const status = defineMethod({
@@ -78,5 +100,12 @@ export const resolveRepository = defineMethod({
 export const watchStatus = defineSubscription({
   payload: RepoInput,
   item: Status,
+  error: RepoNotFoundError,
+});
+
+/** List all local Branches with their ahead/behind counts and the current HEAD state. */
+export const listBranches = defineMethod({
+  payload: RepoInput,
+  success: BranchList,
   error: RepoNotFoundError,
 });

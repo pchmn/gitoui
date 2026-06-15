@@ -12,6 +12,7 @@ export const CHANNELS = {
     resolveRepository: 'git:resolveRepository',
     status: 'git:status',
     watchStatus: 'git:watchStatus',
+    listBranches: 'git:listBranches',
   },
   desktop: {
     pickRepository: 'desktop:pickRepository',

@@ -15,6 +15,13 @@ import { cn } from '#lib/utils';
  */
 const Combobox = ComboboxPrimitive.Root;
 
+/**
+ * Renders the Root's *filtered* items via a function child — the explicit form of the shorthand
+ * `ComboboxList` accepts. Use it (instead of mapping the raw array) whenever items must live inside
+ * a `ComboboxGroup`, so the search input still filters. Renders no element of its own.
+ */
+const ComboboxCollection = ComboboxPrimitive.Collection;
+
 function ComboboxValue(props: ComboboxPrimitive.Value.Props) {
   return <ComboboxPrimitive.Value data-slot='combobox-value' {...props} />;
 }
@@ -66,7 +73,9 @@ function ComboboxContent({
     <ComboboxPrimitive.Portal>
       <ComboboxPrimitive.Positioner
         side={side}
-        sideOffset={sideOffset}
+        sideOffset={({ anchor }) => {
+          return -anchor.height;
+        }}
         align={align}
         alignOffset={alignOffset}
         anchor={anchor}
@@ -165,6 +174,7 @@ function ComboboxSeparator({ className, ...props }: ComboboxPrimitive.Separator.
 
 export {
   Combobox,
+  ComboboxCollection,
   ComboboxContent,
   ComboboxEmpty,
   ComboboxGroup,
