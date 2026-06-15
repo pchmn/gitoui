@@ -43,6 +43,14 @@ _Avoid_: using "ref" when you specifically mean a branch.
 **Ref**:
 Any named pointer — a Branch, a tag, or a remote-tracking branch. **HEAD** is the pointer to the currently checked-out Commit/Branch.
 
+**Detached HEAD**:
+The state where HEAD points directly at a Commit instead of a local Branch — no Branch is current. The branch selector surfaces it read-only as `detached @ <sha>` and highlights nothing.
+_Avoid_: "no branch", "headless".
+
+**Switch** (verb):
+Move HEAD to another local Branch, updating the Working tree to match (`git switch`). The branch-selector action.
+_Avoid_: checkout (overloaded — git uses it for branches, files, and detached HEAD alike), "change branch".
+
 **Stash** (stash entry):
 A saved bundle of Working-tree + Staged changes set aside on the stash stack.
 _Avoid_: shelve.
