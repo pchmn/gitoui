@@ -120,7 +120,8 @@
       { "name": "The Two-Family Rule", "body": "DM Sans carries the entire interface: headings, body, labels, data, and buttons. DM Mono is the only sanctioned second family, and only for rendering real code, diffs, and file content (the documented exception this rule always reserved). No third family, no display serif, no decorative face: if text isn't code, it's DM Sans.", "section": "typography" },
       { "name": "The Fixed Scale Rule", "body": "Sizes are a fixed rem scale, never clamp(). A tool is viewed at a consistent DPI; fluid headings that shrink inside a panel look broken, not responsive.", "section": "typography" },
       { "name": "The Flat-At-Rest Rule", "body": "Cards, panels, the side rail, list rows, and the graph carry no shadow. If you reach for box-shadow on a resting surface, use a Hairline border or a tonal step instead.", "section": "elevation" },
-      { "name": "The No Ghost-Card Rule", "body": "Never pair a 1px border with a wide soft drop shadow on the same element. Pick one: a single Hairline border, or (for a true overlay) the Overlay shadow. Never both.", "section": "elevation" }
+      { "name": "The No Ghost-Card Rule", "body": "Never pair a 1px border with a wide soft drop shadow on the same element. Pick one: a single Hairline border, or (for a true overlay) the Overlay shadow. Never both.", "section": "elevation" },
+      { "name": "The Quiet-Scrollbar Rule", "body": "Scrollbars are chrome and must recede: a thin (~4px), fully rounded thumb tinted from --muted-foreground (25% at rest, 40% on hover) floating in a transparent track, never the chunky opaque platform default. Defined once globally on ::-webkit-scrollbar* in globals.css; don't restyle scrollbars per component.", "section": "elevation" }
     ],
     "dos": [
       "Do derive every grey from the source token (oklch(from var(--primary-source) ...)). Pull from the palette so the UI re-tints.",

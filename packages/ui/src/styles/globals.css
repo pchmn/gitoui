@@ -138,6 +138,27 @@
   [role="button"]:not(:disabled) {
     cursor: pointer;
   }
+
+  /* Thin, themed scrollbars everywhere (DESIGN: chrome recedes), replacing the chunky platform
+     default. Electron is Chromium-only, so the `::-webkit-scrollbar` pseudo-elements suffice: a
+     token-derived thumb that floats in a transparent track — the transparent border + padding-box
+     clip make the 10px track read as a ~4px rounded bar. Darkens on hover. */
+  ::-webkit-scrollbar {
+    width: 0.625rem;
+    height: 0.625rem;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+    background-color: color-mix(in oklab, var(--muted-foreground) 25%, transparent);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklab, var(--muted-foreground) 40%, transparent);
+  }
 }
 
 /* Frameless-window drag regions (Electron). A `drag-region` element acts as the OS title bar
