@@ -260,6 +260,11 @@ instead. A shadow on a panel that isn't floating is the GitKraken-cockpit tell.
 **The No Ghost-Card Rule.** Never pair a 1px border with a wide soft drop shadow on the same
 element. Pick one: a single Hairline border, *or* (for a true overlay) the Overlay shadow. Never both.
 
+**The Quiet-Scrollbar Rule.** Scrollbars are chrome and must recede: a thin (~4px), fully rounded
+thumb tinted from `--muted-foreground` (25% at rest → 40% on hover) floating in a **transparent**
+track — never the chunky opaque platform default. Defined once globally on `::-webkit-scrollbar*`
+in `globals.css`; don't restyle scrollbars per component.
+
 ## 5. Components
 
 Compact and precise. Controls are small and dense — built for a power tool, not a landing page.
