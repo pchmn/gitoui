@@ -1,4 +1,14 @@
-import type { RepoInput, Status } from '@gitoui/contracts/git';
+import type {
+  AddRecentRepositoryInput,
+  RecentRepository,
+  RemoveRecentRepositoryInput,
+} from '@gitoui/contracts/desktop';
+import type {
+  RepoInput,
+  ResolvedRepository,
+  ResolveRepositoryInput,
+  Status,
+} from '@gitoui/contracts/git';
 import { contextBridge, ipcRenderer } from 'electron';
 import { CHANNELS } from '#ipc/channels';
 
@@ -26,6 +36,8 @@ function subscribe(channel: string, payload: unknown, onEvent: (msg: unknown) =>
 }
 
 const git = {
+  resolveRepository: (input: ResolveRepositoryInput): Promise<ResolvedRepository> =>
+    invoke(CHANNELS.git.resolveRepository, input) as Promise<ResolvedRepository>,
   status: (input: RepoInput): Promise<Status> =>
     invoke(CHANNELS.git.status, input) as Promise<Status>,
   watchStatus: (input: RepoInput, onEvent: (msg: unknown) => void): (() => void) =>
@@ -38,6 +50,14 @@ const desktop = {
   platform: process.platform as 'darwin' | 'win32' | 'linux',
   pickRepository: (): Promise<string | null> =>
     invoke(CHANNELS.desktop.pickRepository) as Promise<string | null>,
+  recentRepositories: (): Promise<readonly RecentRepository[]> =>
+    invoke(CHANNELS.desktop.recentRepositories) as Promise<readonly RecentRepository[]>,
+  addRecentRepository: (input: AddRecentRepositoryInput): Promise<readonly RecentRepository[]> =>
+    invoke(CHANNELS.desktop.addRecentRepository, input) as Promise<readonly RecentRepository[]>,
+  removeRecentRepository: (
+    input: RemoveRecentRepositoryInput,
+  ): Promise<readonly RecentRepository[]> =>
+    invoke(CHANNELS.desktop.removeRecentRepository, input) as Promise<readonly RecentRepository[]>,
 };
 
 contextBridge.exposeInMainWorld('git', git);

@@ -2,7 +2,12 @@
   "extends": "@gitoui/tsconfig/react.json",
   "compilerOptions": {
     "composite": true,
-    "types": ["vite/client"]
+    "types": ["vite/client"],
+    // Renderer-only alias. The renderer is vite-only — it never runs in raw Node — so it relaxes
+    // the workspace "imports field, never tsconfig paths" rule for a clean, extensionless
+    // `#renderer/*`. tsgo resolves it via these `paths`; vite resolves it via the package.json
+    // `imports` field (native, extension-resolving). See docs/conventions.md.
+    "paths": { "#renderer/*": ["./src/renderer/src/*"] }
   },
   // `src/ipc/channels.ts` is node-side, but the renderer's `global.d.ts` imports the preload's
   // types, and the preload value-imports CHANNELS — so the web project must resolve this one file.

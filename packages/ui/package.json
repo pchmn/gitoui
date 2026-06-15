@@ -13,6 +13,9 @@
     "./lib/*": "./src/lib/*.ts",
     "./hooks/*": "./src/hooks/*.ts",
     "./button": "./src/components/button.tsx",
+    "./combobox": "./src/components/combobox.tsx",
+    "./identity-avatar": "./src/components/identity-avatar.tsx",
+    "./toast": "./src/components/toast.tsx",
     "./theme-provider": "./src/components/theme/theme-provider.tsx"
   },
   "scripts": {
@@ -26,7 +29,7 @@
     "@base-ui-components/react": "1.0.0-rc.0",
     "@base-ui/react": "^1.5.0",
     "@fontsource-variable/dm-sans": "^5.2.8",
-    "@phosphor-icons/react": "^2.1.10",
+    "@phosphor-icons/react": "catalog:",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "lucide-react": "^1.17.0",

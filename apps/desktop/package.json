@@ -6,23 +6,27 @@
   "main": "out/main/index.js",
   "imports": {
     "#ipc/*": "./src/ipc/*.ts",
-    "#preload/*": "./src/preload/*.ts"
+    "#preload/*": "./src/preload/*.ts",
+    "#renderer/*": "./src/renderer/src/*"
   },
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "build:app": "electron-vite build && electron-builder",
     "start": "electron-vite preview",
-    "check-types": "tsgo --build --noEmit tsconfig.json"
+    "check-types": "tsgo --build --noEmit tsconfig.json",
+    "test": "vitest run"
   },
   "dependencies": {
     "@gitoui/contracts": "workspace:*",
     "@gitoui/core": "workspace:*",
     "@gitoui/ui": "workspace:*",
+    "@phosphor-icons/react": "catalog:",
     "@tanstack/react-db": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-router": "catalog:",
     "effect": "catalog:",
+    "electron-store": "^11.0.2",
     "react": "catalog:",
     "react-dom": "catalog:"
   },
@@ -36,6 +40,7 @@
     "electron-builder": "26.8.1",
     "electron-vite": "5.0.0",
     "tailwindcss": "catalog:",
-    "vite": "^7.0.0"
+    "vite": "^7.0.0",
+    "vitest": "catalog:"
   }
 }

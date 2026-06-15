@@ -10,6 +10,17 @@ export class RepoNotFoundError extends Schema.TaggedError<RepoNotFoundError>()(
   },
 ) {}
 
+/**
+ * A picked path is not a usable Repository: not a git work tree, a bare repo, or the path is gone
+ * (decision #5 — one typed error covers all "can't open this" cases). Raised by `resolveRepository`.
+ */
+export class NotARepositoryError extends Schema.TaggedError<NotARepositoryError>()(
+  'NotARepositoryError',
+  {
+    path: Schema.String,
+  },
+) {}
+
 // --- Domain schemas (minimal placeholders — real shapes come with the business logic) ---
 
 export const ChangeKind = Schema.Literal('added', 'modified', 'deleted', 'renamed', 'untracked');
@@ -36,12 +47,31 @@ export type Status = typeof Status.Type;
 export const RepoInput = Schema.Struct({ repoPath: Schema.String });
 export type RepoInput = typeof RepoInput.Type;
 
+/** A raw, user-picked folder path, before git has validated/canonicalized it. */
+export const ResolveRepositoryInput = Schema.Struct({ path: Schema.String });
+export type ResolveRepositoryInput = typeof ResolveRepositoryInput.Type;
+
+/** The canonical work-tree root (`git rev-parse --show-toplevel`) — the Repository's identity. */
+export const ResolvedRepository = Schema.Struct({ root: Schema.String });
+export type ResolvedRepository = typeof ResolvedRepository.Type;
+
 // --- Contracts (window.git.*) ---
 
 export const status = defineMethod({
   payload: RepoInput,
   success: Status,
   error: RepoNotFoundError,
+});
+
+/**
+ * Validate + canonicalize a picked path in one `--show-toplevel` (decision #5). A path inside a
+ * Repository resolves to its work-tree root; a non-repo / bare repo / gone path fails with a single
+ * `NotARepositoryError`.
+ */
+export const resolveRepository = defineMethod({
+  payload: ResolveRepositoryInput,
+  success: ResolvedRepository,
+  error: NotARepositoryError,
 });
 
 /** Live status: the watcher pushes a fresh `Status` snapshot on each fs change. */

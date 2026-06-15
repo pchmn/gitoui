@@ -4,12 +4,20 @@ import { GitClient } from '@gitoui/core/GitClient';
 import { RepoWatcher } from '@gitoui/core/RepoWatcher';
 import { Effect, Stream } from 'effect';
 import { dialog } from 'electron';
+import { RecentRepositoriesStore } from '../main/RecentRepositoriesStore.ts';
 import { CHANNELS } from './channels.ts';
 import { makeIpcMethod, makeIpcSubscription } from './registry.ts';
 
 /** Mount every IPC channel. Called once on app ready. */
 export function registerIpc(): void {
   // --- window.git.* — backed by @gitoui/core ---
+  makeIpcMethod(CHANNELS.git.resolveRepository, gitContract.resolveRepository, (payload) =>
+    GitClient.pipe(
+      Effect.flatMap((git) => git.resolveRepository(payload.path)),
+      Effect.provide(GitClient.Default),
+    ),
+  );
+
   makeIpcMethod(CHANNELS.git.status, gitContract.status, (payload) =>
     GitClient.pipe(
       Effect.flatMap((git) => git.status(payload.repoPath)),
@@ -32,5 +40,32 @@ export function registerIpc(): void {
       const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
       return result.canceled ? null : (result.filePaths[0] ?? null);
     }),
+  );
+
+  makeIpcMethod(CHANNELS.desktop.recentRepositories, desktopContract.recentRepositories, () =>
+    RecentRepositoriesStore.pipe(
+      Effect.flatMap((store) => store.list()),
+      Effect.provide(RecentRepositoriesStore.Default),
+    ),
+  );
+
+  makeIpcMethod(
+    CHANNELS.desktop.addRecentRepository,
+    desktopContract.addRecentRepository,
+    (payload) =>
+      RecentRepositoriesStore.pipe(
+        Effect.flatMap((store) => store.add(payload.path)),
+        Effect.provide(RecentRepositoriesStore.Default),
+      ),
+  );
+
+  makeIpcMethod(
+    CHANNELS.desktop.removeRecentRepository,
+    desktopContract.removeRecentRepository,
+    (payload) =>
+      RecentRepositoriesStore.pipe(
+        Effect.flatMap((store) => store.remove(payload.path)),
+        Effect.provide(RecentRepositoriesStore.Default),
+      ),
   );
 }

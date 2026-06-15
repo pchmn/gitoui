@@ -9,10 +9,14 @@
  */
 export const CHANNELS = {
   git: {
+    resolveRepository: 'git:resolveRepository',
     status: 'git:status',
     watchStatus: 'git:watchStatus',
   },
   desktop: {
     pickRepository: 'desktop:pickRepository',
+    recentRepositories: 'desktop:recentRepositories',
+    addRecentRepository: 'desktop:addRecentRepository',
+    removeRecentRepository: 'desktop:removeRecentRepository',
   },
 } as const;
