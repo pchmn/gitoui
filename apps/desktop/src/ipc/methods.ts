@@ -41,6 +41,13 @@ export function registerIpc(): void {
     ),
   );
 
+  makeIpcMethod(CHANNELS.git.switchBranch, gitContract.switchBranch, (payload) =>
+    GitClient.pipe(
+      Effect.flatMap((git) => git.switchBranch(payload.repoPath, payload.branch)),
+      Effect.provide(GitClient.Default),
+    ),
+  );
+
   // --- window.desktop.* — backed directly by Electron APIs, never by core ---
   makeIpcMethod(CHANNELS.desktop.pickRepository, desktopContract.pickRepository, () =>
     Effect.promise(async () => {

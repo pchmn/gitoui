@@ -11,6 +11,18 @@ export class RepoNotFoundError extends Schema.TaggedError<RepoNotFoundError>()(
 ) {}
 
 /**
+ * A branch switch was refused because local changes to one or more files would be overwritten.
+ * `paths` lists every file that git refused to overwrite. Named for the *cause* — "conflict" is
+ * reserved for merge conflicts (see CONTEXT.md).
+ */
+export class UncommittedChangesError extends Schema.TaggedError<UncommittedChangesError>()(
+  'UncommittedChangesError',
+  {
+    paths: Schema.Array(Schema.String),
+  },
+) {}
+
+/**
  * A picked path is not a usable Repository: not a git work tree, a bare repo, or the path is gone
  * (decision #5 — one typed error covers all "can't open this" cases). Raised by `resolveRepository`.
  */
@@ -46,6 +58,13 @@ export type Status = typeof Status.Type;
 
 export const RepoInput = Schema.Struct({ repoPath: Schema.String });
 export type RepoInput = typeof RepoInput.Type;
+
+/** Input for switching the active Branch. `RepoInput` has no `branch` field, so a new struct. */
+export const SwitchBranchInput = Schema.Struct({
+  repoPath: Schema.String,
+  branch: Schema.String,
+});
+export type SwitchBranchInput = typeof SwitchBranchInput.Type;
 
 /** A raw, user-picked folder path, before git has validated/canonicalized it. */
 export const ResolveRepositoryInput = Schema.Struct({ path: Schema.String });
@@ -108,4 +127,15 @@ export const listBranches = defineMethod({
   payload: RepoInput,
   success: BranchList,
   error: RepoNotFoundError,
+});
+
+/**
+ * Switch HEAD to a local Branch. Fails with `UncommittedChangesError` when git refuses to overwrite
+ * local changes; any other failure maps to `RepoNotFoundError`. Switching to the current Branch is a
+ * harmless no-op (git exits 0).
+ */
+export const switchBranch = defineMethod({
+  payload: SwitchBranchInput,
+  success: Schema.Void,
+  error: Schema.Union(RepoNotFoundError, UncommittedChangesError),
 });

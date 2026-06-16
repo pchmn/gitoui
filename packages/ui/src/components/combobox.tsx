@@ -1,5 +1,10 @@
 import { Combobox as ComboboxPrimitive } from '@base-ui/react/combobox';
-import { CaretUpDownIcon, CheckIcon, MagnifyingGlassIcon } from '@phosphor-icons/react';
+import {
+  CaretDownIcon,
+  CaretUpDownIcon,
+  CheckIcon,
+  MagnifyingGlassIcon,
+} from '@phosphor-icons/react';
 import { cn } from '#lib/utils';
 
 /**
@@ -34,7 +39,7 @@ function ComboboxTrigger({ className, children, ...props }: ComboboxPrimitive.Tr
       {...props}
     >
       {children}
-      <CaretUpDownIcon className='pointer-events-none shrink-0 text-muted-foreground' />
+      <CaretDownIcon className='pointer-events-none shrink-0 text-muted-foreground size-3' />
     </ComboboxPrimitive.Trigger>
   );
 }
