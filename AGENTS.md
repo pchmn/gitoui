@@ -51,8 +51,8 @@ vocabulary (e.g. "Working tree" not "working directory") is in `CONTEXT.md`. Hon
 ## Commands
 
 - `pnpm dev` · `pnpm build` · `pnpm test` · `pnpm check-types` (tsgo) · `pnpm check` (biome).
-- Type-checking uses **tsgo** (`@typescript/native-preview`). If it chokes on an Effect type,
-  the escape hatch is to swap `tsgo` → `tsc` in the package's `check-types` script.
+- for a specific package, use `pnpm <command> --filter <package-name>`
+- Type-checking uses **tsgo** (`@typescript/native-preview`).
 
 ## Post-Modification Verification
 

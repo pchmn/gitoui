@@ -1,5 +1,9 @@
 import type { Branch, BranchList, ResolvedRepository, Status } from '@gitoui/contracts/git';
-import { NotARepositoryError, RepoNotFoundError } from '@gitoui/contracts/git';
+import {
+  NotARepositoryError,
+  RepoNotFoundError,
+  UncommittedChangesError,
+} from '@gitoui/contracts/git';
 import { Effect } from 'effect';
 import { withGit } from './runGit.ts';
 
@@ -44,6 +48,20 @@ export function parseForEachRef(stdout: string): {
   }
 
   return { branches, currentBranchName };
+}
+
+/**
+ * From a failed checkout's stderr: the conflicting paths if it's the "would be overwritten"
+ * refusal, else null (the caller maps null → RepoNotFoundError). git TAB-indents each path.
+ *
+ * Pure function — no IO — so it can be unit-tested against pinned output without spawning git.
+ */
+export function parseOverwriteError(message: string): string[] | null {
+  if (!message.includes('would be overwritten by checkout')) return null;
+  return message
+    .split('\n')
+    .filter((line) => line.startsWith('\t'))
+    .map((line) => line.trim());
 }
 
 /**
@@ -107,5 +125,30 @@ export class GitClient extends Effect.Service<GitClient>()('@gitoui/core/GitClie
         const sha = (await git.revparse(['--short', 'HEAD'])).trim();
         return { branches, head: { _tag: 'Detached' as const, sha } } satisfies BranchList;
       }).pipe(Effect.catchTag('GitProcessError', () => new RepoNotFoundError({ path: repoPath }))),
+
+    /**
+     * Switch HEAD to a local Branch (issue #16). Runs `git checkout <branch>` and succeeds with
+     * void. Switching to the current Branch is a harmless git no-op (exits 0). On failure, maps
+     * the "would be overwritten" refusal to `UncommittedChangesError` (carrying the conflicting
+     * paths) and every other failure to `RepoNotFoundError`.
+     */
+    switchBranch: (
+      repoPath: string,
+      branch: string,
+    ): Effect.Effect<void, RepoNotFoundError | UncommittedChangesError> =>
+      withGit(repoPath, (git) => git.checkout(branch))
+        .pipe(Effect.asVoid)
+        .pipe(
+          Effect.catchTag(
+            'GitProcessError',
+            (e): Effect.Effect<never, RepoNotFoundError | UncommittedChangesError> => {
+              const message = e.cause instanceof Error ? e.cause.message : String(e.cause);
+              const paths = parseOverwriteError(message);
+              return paths !== null
+                ? Effect.fail(new UncommittedChangesError({ paths }))
+                : Effect.fail(new RepoNotFoundError({ path: repoPath }));
+            },
+          ),
+        ),
   },
 }) {}

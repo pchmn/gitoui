@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { it } from '@effect/vitest';
 import { Effect } from 'effect';
 import { afterAll, beforeAll, describe, expect } from 'vitest';
-import { GitClient, parseForEachRef } from './GitClient.ts';
+import { GitClient, parseForEachRef, parseOverwriteError } from './GitClient.ts';
 
 // --- parseForEachRef unit tests (pure, pinned output) ---
 
@@ -246,6 +246,95 @@ describe('GitClient.listBranches', () => {
       const client = yield* GitClient;
       const error = yield* Effect.flip(client.listBranches(join(base, 'does-not-exist')));
       expect(error._tag).toBe('RepoNotFoundError');
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+});
+
+// --- parseOverwriteError unit tests (pure, pinned output) ---
+
+describe('parseOverwriteError', () => {
+  // Pinned stderr from the issue spec (literal TAB before path).
+  const PINNED =
+    'error: Your local changes to the following files would be overwritten by checkout:\n\ta.txt\nPlease commit your changes or stash them before you switch branches.\nAborting\n';
+
+  it('returns the conflicting paths for the overwrite refusal', () => {
+    const paths = parseOverwriteError(PINNED);
+    expect(paths).toEqual(['a.txt']);
+  });
+
+  it('returns null for a non-overwrite failure message', () => {
+    const paths = parseOverwriteError('fatal: not a git repository');
+    expect(paths).toBeNull();
+  });
+
+  it('handles the untracked variant (same substring)', () => {
+    const untracked =
+      'error: The following untracked working tree files would be overwritten by checkout:\n\tx\nPlease move or remove them before you switch branches.\nAborting\n';
+    const paths = parseOverwriteError(untracked);
+    expect(paths).toEqual(['x']);
+  });
+});
+
+// --- GitClient.switchBranch integration tests ---
+
+describe('GitClient.switchBranch', () => {
+  let base: string;
+  let repo: string;
+
+  const g = (cwd: string, ...args: string[]) =>
+    execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+
+  beforeAll(() => {
+    base = realpathSync(mkdtempSync(join(tmpdir(), 'gitoui-switch-')));
+    repo = join(base, 'repo');
+    mkdirSync(repo, { recursive: true });
+    execFileSync('git', ['init', '-q', '-b', 'main', repo], { cwd: base });
+    execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: repo });
+    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: repo });
+    // Initial commit on main
+    writeFileSync(join(repo, 'a.txt'), 'original');
+    g(repo, 'add', 'a.txt');
+    g(repo, 'commit', '-m', 'init');
+    // Create a feature branch
+    g(repo, 'branch', 'feature');
+  });
+
+  afterAll(() => rmSync(base, { recursive: true, force: true }));
+
+  it.effect('switches to a different branch successfully', () =>
+    Effect.gen(function* () {
+      const client = yield* GitClient;
+      yield* client.switchBranch(repo, 'feature');
+      const currentBranch = g(repo, 'rev-parse', '--abbrev-ref', 'HEAD');
+      expect(currentBranch).toBe('feature');
+      // Switch back to main for subsequent tests
+      g(repo, 'checkout', 'main');
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('fails with UncommittedChangesError when checkout would overwrite local changes', () =>
+    Effect.gen(function* () {
+      // Modify a.txt (tracked) to create a conflict — git refuses because feature branch
+      // has the same file and switching would overwrite this unstaged change.
+      // We need feature to have a different version of a.txt so checkout would overwrite.
+      // Set up: commit a different a.txt on feature, come back to main, edit a.txt without staging.
+      g(repo, 'checkout', 'feature');
+      writeFileSync(join(repo, 'a.txt'), 'feature-version');
+      g(repo, 'add', 'a.txt');
+      g(repo, 'commit', '-m', 'feature change');
+      g(repo, 'checkout', 'main');
+      // Now write local (unstaged) changes to a.txt — this would be overwritten by checkout feature
+      writeFileSync(join(repo, 'a.txt'), 'dirty-local');
+
+      const client = yield* GitClient;
+      const error = yield* Effect.flip(client.switchBranch(repo, 'feature'));
+      expect(error._tag).toBe('UncommittedChangesError');
+      if (error._tag === 'UncommittedChangesError') {
+        expect(error.paths).toContain('a.txt');
+      }
+
+      // Restore clean state for other tests
+      g(repo, 'checkout', '--', 'a.txt');
     }).pipe(Effect.provide(GitClient.Default)),
   );
 });

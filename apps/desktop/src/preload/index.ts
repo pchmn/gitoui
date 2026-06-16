@@ -9,6 +9,7 @@ import type {
   ResolvedRepository,
   ResolveRepositoryInput,
   Status,
+  SwitchBranchInput,
 } from '@gitoui/contracts/git';
 import { contextBridge, ipcRenderer } from 'electron';
 import { CHANNELS } from '#ipc/channels';
@@ -45,6 +46,8 @@ const git = {
     subscribe(CHANNELS.git.watchStatus, input, onEvent),
   listBranches: (input: RepoInput): Promise<BranchList> =>
     invoke(CHANNELS.git.listBranches, input) as Promise<BranchList>,
+  switchBranch: (input: SwitchBranchInput): Promise<void> =>
+    invoke(CHANNELS.git.switchBranch, input) as Promise<void>,
 };
 
 const desktop = {

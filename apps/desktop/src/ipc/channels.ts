@@ -13,6 +13,7 @@ export const CHANNELS = {
     status: 'git:status',
     watchStatus: 'git:watchStatus',
     listBranches: 'git:listBranches',
+    switchBranch: 'git:switchBranch',
   },
   desktop: {
     pickRepository: 'desktop:pickRepository',

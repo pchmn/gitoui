@@ -16,17 +16,20 @@ import { GitBranchIcon } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { useActiveRepository } from '../../repository/ActiveRepositoryContext';
 import { useBranches } from '../hooks/useBranches';
+import { useSwitchBranch } from '../hooks/useSwitchBranch';
 
 /**
- * The top-bar Branch selector (issue #15): a filterable overlay listing local Branches with the
- * current one highlighted and ahead/behind badges per Branch. Read-only in this slice — clicking a
- * Branch does nothing (Switch lands in a later tranche). Detached HEAD shows `detached @ <sha>` as
- * the trigger with nothing highlighted. Composed from `@gitoui/ui` Combobox like `RepoSelector`,
- * with no changes to `@gitoui/ui` — ahead/behind badges are app-side spans.
+ * The top-bar Branch selector (issues #15 + #16): a filterable overlay listing local Branches with
+ * the current one highlighted and ahead/behind badges per Branch. Clicking a non-current Branch
+ * switches HEAD to it; a dirty Working tree that git refuses to overwrite surfaces a Toast. Detached
+ * HEAD shows `detached @ <sha>` as the trigger with nothing highlighted. Composed from `@gitoui/ui`
+ * Combobox like `RepoSelector`, with no changes to `@gitoui/ui` — ahead/behind badges are
+ * app-side spans.
  */
 export function BranchSelector() {
   const { root } = useActiveRepository();
   const { data: branchList } = useBranches(root);
+  const switchBranch = useSwitchBranch();
   const [open, setOpen] = useState(false);
 
   if (root === null || branchList === undefined) return null;
@@ -42,8 +45,11 @@ export function BranchSelector() {
     <Combobox
       items={branches}
       value={currentBranch}
-      onValueChange={() => {
-        // Switch lands in a later tranche — no-op for now.
+      onValueChange={(branch: Branch | null) => {
+        // Ignore null and selecting the already-current Branch — skip the round-trip.
+        if (branch === null || branch.isCurrent) return;
+        setOpen(false);
+        switchBranch.mutate(branch.name);
       }}
       isItemEqualToValue={(a: Branch, b: Branch) => a.name === b.name}
       itemToStringLabel={(b: Branch) => b.name}
