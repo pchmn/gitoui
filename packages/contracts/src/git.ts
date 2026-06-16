@@ -10,6 +10,22 @@ export class RepoNotFoundError extends Schema.TaggedError<RepoNotFoundError>()(
   },
 ) {}
 
+/** A branch creation was refused because a branch with that name already exists. */
+export class BranchExistsError extends Schema.TaggedError<BranchExistsError>()(
+  'BranchExistsError',
+  {
+    name: Schema.String,
+  },
+) {}
+
+/** The provided branch name was rejected by git as invalid. */
+export class InvalidBranchNameError extends Schema.TaggedError<InvalidBranchNameError>()(
+  'InvalidBranchNameError',
+  {
+    name: Schema.String,
+  },
+) {}
+
 /**
  * A branch switch was refused because local changes to one or more files would be overwritten.
  * `paths` lists every file that git refused to overwrite. Named for the *cause* — "conflict" is
@@ -65,6 +81,13 @@ export const SwitchBranchInput = Schema.Struct({
   branch: Schema.String,
 });
 export type SwitchBranchInput = typeof SwitchBranchInput.Type;
+
+/** Input for creating a new Branch from the current HEAD and switching onto it. */
+export const CreateBranchInput = Schema.Struct({
+  repoPath: Schema.String,
+  name: Schema.String,
+});
+export type CreateBranchInput = typeof CreateBranchInput.Type;
 
 /** A raw, user-picked folder path, before git has validated/canonicalized it. */
 export const ResolveRepositoryInput = Schema.Struct({ path: Schema.String });
@@ -138,4 +161,16 @@ export const switchBranch = defineMethod({
   payload: SwitchBranchInput,
   success: Schema.Void,
   error: Schema.Union(RepoNotFoundError, UncommittedChangesError),
+});
+
+/**
+ * Create a new Branch from the current HEAD and switch onto it in one step
+ * (`git checkout -b <name>`). Fails with `BranchExistsError` when a branch with that name already
+ * exists, `InvalidBranchNameError` when git rejects the name, and `RepoNotFoundError` for any
+ * other failure. Name validity is delegated to git — no hand-rolled regex (decision #4).
+ */
+export const createBranch = defineMethod({
+  payload: CreateBranchInput,
+  success: Schema.Void,
+  error: Schema.Union(RepoNotFoundError, BranchExistsError, InvalidBranchNameError),
 });

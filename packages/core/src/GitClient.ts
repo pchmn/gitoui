@@ -1,5 +1,7 @@
 import type { Branch, BranchList, ResolvedRepository, Status } from '@gitoui/contracts/git';
 import {
+  BranchExistsError,
+  InvalidBranchNameError,
   NotARepositoryError,
   RepoNotFoundError,
   UncommittedChangesError,
@@ -147,6 +149,38 @@ export class GitClient extends Effect.Service<GitClient>()('@gitoui/core/GitClie
               return paths !== null
                 ? Effect.fail(new UncommittedChangesError({ paths }))
                 : Effect.fail(new RepoNotFoundError({ path: repoPath }));
+            },
+          ),
+        ),
+
+    /**
+     * Create a new Branch from HEAD and switch onto it in one step (issue #17). Runs
+     * `git checkout -b <name>` (`checkoutLocalBranch`). On failure, maps the stderr:
+     * "already exists" → `BranchExistsError`, "is not a valid branch name" →
+     * `InvalidBranchNameError`, everything else → `RepoNotFoundError`. Name validity is
+     * delegated to git — no hand-rolled regex (decision #4).
+     */
+    createBranch: (
+      repoPath: string,
+      name: string,
+    ): Effect.Effect<void, RepoNotFoundError | BranchExistsError | InvalidBranchNameError> =>
+      withGit(repoPath, (git) => git.checkoutLocalBranch(name))
+        .pipe(Effect.asVoid)
+        .pipe(
+          Effect.catchTag(
+            'GitProcessError',
+            (
+              e,
+            ): Effect.Effect<
+              never,
+              RepoNotFoundError | BranchExistsError | InvalidBranchNameError
+            > => {
+              const message = e.cause instanceof Error ? e.cause.message : String(e.cause);
+              if (message.includes('already exists'))
+                return Effect.fail(new BranchExistsError({ name }));
+              if (message.includes('is not a valid branch name'))
+                return Effect.fail(new InvalidBranchNameError({ name }));
+              return Effect.fail(new RepoNotFoundError({ path: repoPath }));
             },
           ),
         ),
