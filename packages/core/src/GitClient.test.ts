@@ -338,3 +338,62 @@ describe('GitClient.switchBranch', () => {
     }).pipe(Effect.provide(GitClient.Default)),
   );
 });
+
+// --- GitClient.createBranch integration tests ---
+
+describe('GitClient.createBranch', () => {
+  let base: string;
+  let repo: string;
+
+  const g = (cwd: string, ...args: string[]) =>
+    execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+
+  beforeAll(() => {
+    base = realpathSync(mkdtempSync(join(tmpdir(), 'gitoui-create-branch-')));
+    repo = join(base, 'repo');
+    mkdirSync(repo, { recursive: true });
+    execFileSync('git', ['init', '-q', '-b', 'main', repo], { cwd: base });
+    execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: repo });
+    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: repo });
+    // Initial commit so HEAD is valid and branching is possible
+    writeFileSync(join(repo, 'a.txt'), 'a');
+    g(repo, 'add', 'a.txt');
+    g(repo, 'commit', '-m', 'init');
+  });
+
+  afterAll(() => rmSync(base, { recursive: true, force: true }));
+
+  it.effect('creates a branch from HEAD and switches onto it', () =>
+    Effect.gen(function* () {
+      const client = yield* GitClient;
+      yield* client.createBranch(repo, 'feature');
+      const current = g(repo, 'rev-parse', '--abbrev-ref', 'HEAD');
+      expect(current).toBe('feature');
+      // Restore for subsequent tests
+      g(repo, 'checkout', 'main');
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('fails with BranchExistsError when the branch name is already taken', () =>
+    Effect.gen(function* () {
+      const client = yield* GitClient;
+      const error = yield* Effect.flip(client.createBranch(repo, 'feature'));
+      expect(error._tag).toBe('BranchExistsError');
+      if (error._tag === 'BranchExistsError') {
+        expect(error.name).toBe('feature');
+      }
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('fails with InvalidBranchNameError for a name git rejects', () =>
+    Effect.gen(function* () {
+      const client = yield* GitClient;
+      // Double dots are universally rejected by git as an invalid refname.
+      const error = yield* Effect.flip(client.createBranch(repo, 'bad..name'));
+      expect(error._tag).toBe('InvalidBranchNameError');
+      if (error._tag === 'InvalidBranchNameError') {
+        expect(error.name).toBe('bad..name');
+      }
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+});

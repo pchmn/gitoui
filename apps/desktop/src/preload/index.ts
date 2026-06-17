@@ -5,6 +5,7 @@ import type {
 } from '@gitoui/contracts/desktop';
 import type {
   BranchList,
+  CreateBranchInput,
   RepoInput,
   ResolvedRepository,
   ResolveRepositoryInput,
@@ -48,6 +49,8 @@ const git = {
     invoke(CHANNELS.git.listBranches, input) as Promise<BranchList>,
   switchBranch: (input: SwitchBranchInput): Promise<void> =>
     invoke(CHANNELS.git.switchBranch, input) as Promise<void>,
+  createBranch: (input: CreateBranchInput): Promise<void> =>
+    invoke(CHANNELS.git.createBranch, input) as Promise<void>,
 };
 
 const desktop = {
