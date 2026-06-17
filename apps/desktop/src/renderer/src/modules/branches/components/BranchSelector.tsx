@@ -67,6 +67,9 @@ export function BranchSelector() {
   }
 
   function handleCreateKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    // The create input lives inside the Combobox alongside the filter input, so keep its keystrokes
+    // from reaching Base UI's keyboard handling (type-ahead, list navigation, Escape-to-close).
+    event.stopPropagation();
     if (event.key === 'Escape') {
       event.preventDefault();
       setCreating(false);
@@ -112,52 +115,50 @@ export function BranchSelector() {
       </ComboboxTrigger>
 
       <ComboboxContent className='w-72'>
-        {creating ? (
-          <div className='p-1'>
-            <input
-              ref={inputRef}
-              // Mirror ComboboxInput's visual style so it reads as the same control.
-              className='flex h-8 w-full rounded-sm border border-input bg-transparent px-2 text-xs outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/30'
-              placeholder='Branch name'
-              onKeyDown={handleCreateKeyDown}
-            />
-          </div>
-        ) : (
-          <>
-            <ComboboxInput placeholder='Filter branches…' />
-            <ComboboxEmpty>No branches found.</ComboboxEmpty>
-            <ComboboxList>
-              {/* The group label is hidden when the filter empties the list so it never sits above
-                  the "No branches found" message. Items render through `ComboboxCollection` (not a
-                  raw map) so the search input actually filters them — Base UI filters its own
-                  `items`. */}
-              <ComboboxGroup className='group-data-empty/combobox-content:hidden'>
-                <ComboboxGroupLabel>LOCAL</ComboboxGroupLabel>
-                <ComboboxCollection>
-                  {(branch: Branch) => (
-                    <ComboboxItem key={branch.name} value={branch} className='gap-2'>
-                      <span className='min-w-0 flex-1 truncate'>{branch.name}</span>
-                      <AheadBehindBadge ahead={branch.ahead} behind={branch.behind} />
-                    </ComboboxItem>
-                  )}
-                </ComboboxCollection>
-              </ComboboxGroup>
-            </ComboboxList>
-            {/* Footer: only render when HEAD is on a Branch (Detached HEAD is display-only this
-                tranche). Mirrors RepoSelector's "Open repository…" footer layout. */}
-            {currentBranchName !== null && (
-              <div className='border-t border-border p-1'>
-                <button
-                  type='button'
-                  className='flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-xs/relaxed text-foreground outline-none select-none hover:bg-muted focus-visible:bg-muted'
-                  onClick={handleCreateClick}
-                >
-                  <PlusIcon className='size-3.5 text-muted-foreground' />
-                  New branch from {currentBranchName}…
-                </button>
-              </div>
+        <ComboboxInput placeholder='Filter branches…' />
+        <ComboboxEmpty>No branches found.</ComboboxEmpty>
+        <ComboboxList>
+          {/* The group label is hidden when the filter empties the list so it never sits above
+              the "No branches found" message. Items render through `ComboboxCollection` (not a
+              raw map) so the search input actually filters them — Base UI filters its own
+              `items`. */}
+          <ComboboxGroup className='group-data-empty/combobox-content:hidden'>
+            <ComboboxGroupLabel>LOCAL</ComboboxGroupLabel>
+            <ComboboxCollection>
+              {(branch: Branch) => (
+                <ComboboxItem key={branch.name} value={branch} className='gap-2'>
+                  <span className='min-w-0 flex-1 truncate'>{branch.name}</span>
+                  <AheadBehindBadge ahead={branch.ahead} behind={branch.behind} />
+                </ComboboxItem>
+              )}
+            </ComboboxCollection>
+          </ComboboxGroup>
+        </ComboboxList>
+        {/* Footer: only render when HEAD is on a Branch (Detached HEAD is display-only this
+            tranche). The button toggles to an inline name input in place, keeping the filter +
+            list visible above as context for the branch-point. Mirrors RepoSelector's
+            "Open repository…" footer layout. */}
+        {currentBranchName !== null && (
+          <div className='border-t border-border p-1'>
+            {creating ? (
+              <input
+                ref={inputRef}
+                // Mirror ComboboxInput's visual style so it reads as the same control.
+                className='flex h-8 w-full rounded-sm border border-input bg-transparent px-2 text-xs outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/30'
+                placeholder={`New branch from ${currentBranchName}…`}
+                onKeyDown={handleCreateKeyDown}
+              />
+            ) : (
+              <button
+                type='button'
+                className='flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-xs/relaxed text-foreground outline-none select-none hover:bg-muted focus-visible:bg-muted'
+                onClick={handleCreateClick}
+              >
+                <PlusIcon className='size-3.5 text-muted-foreground' />
+                New branch from {currentBranchName}…
+              </button>
             )}
-          </>
+          </div>
         )}
       </ComboboxContent>
     </Combobox>
