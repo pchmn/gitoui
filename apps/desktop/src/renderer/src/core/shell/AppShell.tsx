@@ -2,16 +2,19 @@ import { useActiveRepository } from '#renderer/modules/repository/ActiveReposito
 import { EmptyState } from '#renderer/modules/repository/components/EmptyState';
 import { RepositoryView } from '#renderer/modules/repository/components/RepositoryView';
 import { useReopenLastRepository } from '#renderer/modules/repository/hooks/useReopenLastRepository';
+import { RepoRail } from './RepoRail';
 import { StatusBar } from './StatusBar';
 import { TopBar } from './TopBar';
 
 /**
- * The vertical app shell (epic decision 8): frameless top bar, a flexible content region, and the
- * minimal status bar pinned to the bottom. No 3-column split yet — that lands with the graph tranche.
+ * The vertical app shell (epic decision 8): frameless top bar, a flex-row body (rail + center +
+ * future right inspector), and the minimal status bar pinned to the bottom.
  *
- * On launch it reopens the last active Repository (MRU[0], re-validated — issue #10); the content
- * region stays blank while that one attempt settles, so the empty-state CTA never flashes before a
- * restored repo view.
+ * The body is a flex row so that a right inspector column can slot in as a third flex child later
+ * without a rewrite. The rail is rendered only when a Repository is open; on `EmptyState` the
+ * center stays full-width. On launch it reopens the last active Repository (MRU[0],
+ * re-validated — issue #10); the content region stays blank while that one attempt settles, so
+ * the empty-state CTA never flashes before a restored repo view.
  */
 export function AppShell() {
   const { root } = useActiveRepository();
@@ -20,9 +23,13 @@ export function AppShell() {
   return (
     <div className='flex h-screen flex-col bg-background text-foreground'>
       <TopBar />
-      <main className='min-h-0 flex-1 overflow-auto'>
-        {root !== null ? <RepositoryView root={root} /> : isRestoring ? null : <EmptyState />}
-      </main>
+      <div className='flex min-h-0 flex-1'>
+        {root !== null && <RepoRail />}
+        <main className='min-h-0 flex-1 overflow-auto'>
+          {root !== null ? <RepositoryView root={root} /> : isRestoring ? null : <EmptyState />}
+        </main>
+        {/* right inspector column slots here in a future slice */}
+      </div>
       <StatusBar />
     </div>
   );

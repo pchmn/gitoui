@@ -10,7 +10,7 @@ export function TopBar() {
   return (
     <header
       className={cn(
-        'drag-region flex h-11 shrink-0 items-center gap-2 border-b border-border bg-background px-2',
+        'drag-region flex h-12 shrink-0 items-center gap-2 border-b border-border bg-background px-2',
         isMac && 'pl-20',
       )}
     >
