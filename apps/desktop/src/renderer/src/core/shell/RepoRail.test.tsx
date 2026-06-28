@@ -1,0 +1,101 @@
+/**
+ * @vitest-environment happy-dom
+ */
+
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { useEffect } from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  ActiveRepositoryProvider,
+  useActiveRepository,
+} from '#renderer/modules/repository/ActiveRepositoryContext';
+import { AppShell } from './AppShell';
+
+afterEach(() => {
+  cleanup();
+  localStorage.clear();
+});
+
+// Stub out window.desktop and window.git — injected by the preload in Electron, absent in tests.
+vi.stubGlobal('desktop', { platform: 'linux' });
+vi.stubGlobal('git', {
+  status: vi.fn().mockResolvedValue({ branch: 'main', ahead: 0, behind: 0, entries: [] }),
+  listBranches: vi.fn().mockResolvedValue([]),
+  createBranch: vi.fn().mockResolvedValue(undefined),
+  switchBranch: vi.fn().mockResolvedValue(undefined),
+  openRepository: vi.fn().mockResolvedValue('/repo'),
+  listRecentRepositories: vi.fn().mockResolvedValue([]),
+  removeRecentRepository: vi.fn().mockResolvedValue(undefined),
+});
+
+// Stub useReopenLastRepository so AppShell does not fire IPC calls on mount.
+vi.mock('#renderer/modules/repository/hooks/useReopenLastRepository', () => ({
+  useReopenLastRepository: () => ({ isRestoring: false }),
+}));
+
+/** Sets the active repository root synchronously via context before the tree renders. */
+function RootSetter({ root }: { root: string | null }) {
+  const { setActiveRepository } = useActiveRepository();
+  useEffect(() => {
+    setActiveRepository(root);
+  }, [root, setActiveRepository]);
+  return null;
+}
+
+function Wrapper({ root }: { root: string | null }) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ActiveRepositoryProvider>
+        <RootSetter root={root} />
+        <AppShell />
+      </ActiveRepositoryProvider>
+    </QueryClientProvider>
+  );
+}
+
+describe('RepoRail visibility', () => {
+  it('renders the rail with a Branches section when a Repository is open', async () => {
+    render(<Wrapper root='/repo/my-project' />);
+    // Wait for the useEffect to fire and re-render with the root set.
+    expect(await screen.findByText('Branches')).toBeTruthy();
+  });
+
+  it('does not render the rail on EmptyState (no repo open)', () => {
+    render(<Wrapper root={null} />);
+    expect(screen.queryByText('Branches')).toBeNull();
+  });
+});
+
+describe('RepoRail resize', () => {
+  it('resizes the rail via the separator and persists the width', async () => {
+    render(<Wrapper root='/repo/my-project' />);
+    await screen.findByText('Branches');
+
+    const separator = screen.getByRole('separator');
+    const rail = separator.closest('aside') as HTMLElement;
+    expect(rail.style.width).toBe('256px'); // default
+
+    // ArrowLeft on a left-side rail shrinks it by 8px; the width persists to localStorage.
+    fireEvent.keyDown(separator, { key: 'ArrowLeft' });
+    expect(rail.style.width).toBe('248px');
+    expect(localStorage.getItem('gitoui:rail-width')).toBe('248');
+
+    // Shift = coarse step (32px).
+    fireEvent.keyDown(separator, { key: 'ArrowRight', shiftKey: true });
+    expect(rail.style.width).toBe('280px');
+
+    // Double-click restores the default.
+    fireEvent.doubleClick(separator);
+    expect(rail.style.width).toBe('256px');
+  });
+
+  it('restores a previously persisted width on mount', async () => {
+    localStorage.setItem('gitoui:rail-width', '320');
+    render(<Wrapper root='/repo/my-project' />);
+    await screen.findByText('Branches');
+    const rail = screen.getByRole('separator').closest('aside') as HTMLElement;
+    expect(rail.style.width).toBe('320px');
+  });
+});

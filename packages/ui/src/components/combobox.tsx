@@ -1,10 +1,5 @@
 import { Combobox as ComboboxPrimitive } from '@base-ui/react/combobox';
-import {
-  CaretDownIcon,
-  CaretUpDownIcon,
-  CheckIcon,
-  MagnifyingGlassIcon,
-} from '@phosphor-icons/react';
+import { CaretDownIcon, CheckIcon, MagnifyingGlassIcon } from '@phosphor-icons/react';
 import { cn } from '#lib/utils';
 
 /**

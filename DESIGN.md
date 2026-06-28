@@ -282,6 +282,11 @@ divided by Hairlines and the Canvas→Surface tonal step:
 A slim **status bar** pins the bottom across all three columns. Below the `compact` breakpoint the
 rail collapses to icons; the layout is responsive structurally, never via fluid type.
 
+The side columns (rail, inspector) are **user-resizable** in px: the dividing Hairline doubles as the
+drag handle (it brightens to `primary` on hover / focus / drag), supports keyboard (Arrow keys, Shift
+for a coarse step) and double-click-to-reset, and the center Canvas absorbs the change. Each width is
+persisted across sessions. Min/max keep either side from crowding out the graph.
+
 ### Buttons
 - **Shape:** gently rounded, `rounded-md` (0.4rem ≈ 6.4px). Pills and 24px+ radii are forbidden on
   buttons.
