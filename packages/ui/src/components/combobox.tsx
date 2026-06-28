@@ -1,5 +1,7 @@
 import { Combobox as ComboboxPrimitive } from '@base-ui/react/combobox';
 import { CaretDownIcon, CheckIcon, MagnifyingGlassIcon } from '@phosphor-icons/react';
+import { inputVariants } from '#components/input';
+import { InputGroup, InputGroupAddon } from '#components/input-group';
 import { cn } from '#lib/utils';
 
 /**
@@ -40,18 +42,25 @@ function ComboboxTrigger({ className, children, ...props }: ComboboxPrimitive.Tr
 }
 
 function ComboboxInput({ className, ...props }: ComboboxPrimitive.Input.Props) {
+  // The flat (`ghost`) `InputGroup` is the shared search-field chrome — the same primitive the
+  // Repository rail filter uses — wrapping Base UI's own input (so type-ahead filtering still works)
+  // styled with the shared `Input` ghost variant. The `border-b` divides search from list inside the
+  // popover; the rail filter omits it.
   return (
-    <div className='flex items-center gap-2 border-b border-border px-2.5'>
-      <MagnifyingGlassIcon className='size-3.5 shrink-0 text-muted-foreground' />
+    <InputGroup variant='ghost' className='border-b border-border'>
+      <InputGroupAddon>
+        <MagnifyingGlassIcon />
+      </InputGroupAddon>
       <ComboboxPrimitive.Input
         data-slot='combobox-input'
         className={cn(
-          'h-8 w-full bg-transparent text-xs/relaxed text-foreground outline-none placeholder:text-muted-foreground',
+          inputVariants({ variant: 'ghost' }),
+          'flex-1 rounded-none text-xs/relaxed',
           className,
         )}
         {...props}
       />
-    </div>
+    </InputGroup>
   );
 }
 

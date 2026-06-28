@@ -15,6 +15,9 @@
     "./button": "./src/components/button.tsx",
     "./combobox": "./src/components/combobox.tsx",
     "./identity-avatar": "./src/components/identity-avatar.tsx",
+    "./input": "./src/components/input.tsx",
+    "./input-group": "./src/components/input-group.tsx",
+    "./textarea": "./src/components/textarea.tsx",
     "./toast": "./src/components/toast.tsx",
     "./theme-provider": "./src/components/theme/theme-provider.tsx"
   },

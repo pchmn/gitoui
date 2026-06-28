@@ -307,6 +307,11 @@ persisted across sessions. Min/max keep either side from crowding out the graph.
 - **Focus:** border shifts to `ring` with a 2px `ring/30` halo — no glow, no scale.
 - **Error:** `aria-invalid` shows a destructive border + ring; placeholder text must clear 4.5:1
   (not the default light grey).
+- **Addons & search:** a field can carry a leading/trailing icon or button via `InputGroup` — the
+  group owns the chrome, the inner input (`Input` `ghost`) stays borderless so the addon reads as
+  part of the field. The flat (`ghost`) `InputGroup` — transparent, no border, fill, or halo, with a
+  leading magnifying glass — is the shared search field: the Combobox popover (which adds a bottom
+  Hairline to divide search from list) and the Repository rail's global filter both use it.
 
 ### List rows (repository rail, branches, changes)
 - Dense single-line rows at Label size with a leading status dot or icon. Hover → Muted Surface;
