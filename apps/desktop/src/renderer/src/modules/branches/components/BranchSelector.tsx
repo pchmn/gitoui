@@ -18,6 +18,7 @@ import { useActiveRepository } from '../../repository/ActiveRepositoryContext';
 import { useBranches } from '../hooks/useBranches';
 import { useCreateBranch } from '../hooks/useCreateBranch';
 import { useSwitchBranch } from '../hooks/useSwitchBranch';
+import { AheadBehindBadge } from './AheadBehindBadge';
 
 /**
  * The top-bar Branch selector (issues #15 + #16 + #17): a filterable overlay listing local Branches
@@ -128,7 +129,11 @@ export function BranchSelector() {
               {(branch: Branch) => (
                 <ComboboxItem key={branch.name} value={branch} className='gap-2'>
                   <span className='min-w-0 flex-1 truncate'>{branch.name}</span>
-                  <AheadBehindBadge ahead={branch.ahead} behind={branch.behind} />
+                  <AheadBehindBadge
+                    upstream={branch.upstream}
+                    ahead={branch.ahead}
+                    behind={branch.behind}
+                  />
                 </ComboboxItem>
               )}
             </ComboboxCollection>
@@ -162,16 +167,5 @@ export function BranchSelector() {
         )}
       </ComboboxContent>
     </Combobox>
-  );
-}
-
-/** App-side ahead/behind badge — no `@gitoui/ui` change (issue #15 constraint). */
-function AheadBehindBadge({ ahead, behind }: { ahead: number; behind: number }) {
-  if (ahead === 0 && behind === 0) return null;
-  return (
-    <span className='ml-auto flex shrink-0 items-center gap-0.5 text-[0.625rem] text-muted-foreground'>
-      {ahead > 0 && <span>↑{ahead}</span>}
-      {behind > 0 && <span>↓{behind}</span>}
-    </span>
   );
 }

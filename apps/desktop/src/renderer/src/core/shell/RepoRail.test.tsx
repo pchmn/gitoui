@@ -2,10 +2,11 @@
  * @vitest-environment happy-dom
  */
 
+import type { BranchList } from '@gitoui/contracts/git';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { useEffect } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ActiveRepositoryProvider,
   useActiveRepository,
@@ -19,15 +20,24 @@ afterEach(() => {
 
 // Stub out window.desktop and window.git — injected by the preload in Electron, absent in tests.
 vi.stubGlobal('desktop', { platform: 'linux' });
-vi.stubGlobal('git', {
-  status: vi.fn().mockResolvedValue({ branch: 'main', ahead: 0, behind: 0, entries: [] }),
-  listBranches: vi.fn().mockResolvedValue([]),
-  createBranch: vi.fn().mockResolvedValue(undefined),
-  switchBranch: vi.fn().mockResolvedValue(undefined),
-  openRepository: vi.fn().mockResolvedValue('/repo'),
-  listRecentRepositories: vi.fn().mockResolvedValue([]),
-  removeRecentRepository: vi.fn().mockResolvedValue(undefined),
-});
+
+/** Re-stub window.git before each test so a test can override `listBranches` without leaking. */
+function stubGit(listBranches?: () => Promise<BranchList>) {
+  vi.stubGlobal('git', {
+    status: vi.fn().mockResolvedValue({ branch: 'main', ahead: 0, behind: 0, entries: [] }),
+    listBranches:
+      listBranches !== undefined
+        ? vi.fn(listBranches)
+        : vi.fn().mockResolvedValue({ branches: [], head: { _tag: 'OnBranch', branch: 'main' } }),
+    createBranch: vi.fn().mockResolvedValue(undefined),
+    switchBranch: vi.fn().mockResolvedValue(undefined),
+    openRepository: vi.fn().mockResolvedValue('/repo'),
+    listRecentRepositories: vi.fn().mockResolvedValue([]),
+    removeRecentRepository: vi.fn().mockResolvedValue(undefined),
+  });
+}
+
+beforeEach(() => stubGit());
 
 // Stub useReopenLastRepository so AppShell does not fire IPC calls on mount.
 vi.mock('#renderer/modules/repository/hooks/useReopenLastRepository', () => ({
@@ -97,5 +107,32 @@ describe('RepoRail resize', () => {
     await screen.findByText('Branches');
     const rail = screen.getByRole('separator').closest('aside') as HTMLElement;
     expect(rail.style.width).toBe('320px');
+  });
+});
+
+describe('RepoRail global filter', () => {
+  it('narrows the branch list as the user types in the rail-level filter', async () => {
+    stubGit(() =>
+      Promise.resolve({
+        branches: [
+          { name: 'main', isCurrent: true, ahead: 0, behind: 0 },
+          { name: 'feature/login', isCurrent: false, ahead: 0, behind: 0 },
+        ],
+        head: { _tag: 'OnBranch', branch: 'main' },
+      }),
+    );
+    render(<Wrapper root='/repo/my-project' />);
+
+    // Scope to the rail so the top-bar Branch selector (also a "main") never confuses the query.
+    const rail = (await screen.findByText('Branches')).closest('aside') as HTMLElement;
+    // Wait for the async branch list to render under the header.
+    expect(await within(rail).findByText('feature/login')).toBeTruthy();
+    expect(within(rail).getByText('main')).toBeTruthy();
+
+    const filter = within(rail).getByRole('textbox', { name: /filter branches/i });
+    fireEvent.change(filter, { target: { value: 'feat' } });
+
+    expect(within(rail).getByText('feature/login')).toBeTruthy();
+    expect(within(rail).queryByText('main')).toBeNull();
   });
 });
