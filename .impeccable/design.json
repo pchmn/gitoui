@@ -71,6 +71,14 @@
       "css": ".ds-input{height:28px;width:240px;padding:0 8px;font-family:'DM Sans Variable',sans-serif;font-size:.75rem;line-height:1.6;color:oklch(0.180 0.0131 50.6);background:oklch(0.920 0.0131 50.6);border:1px solid oklch(0.900 0.0164 50.6);border-radius:.4rem;outline:none;transition:border-color .15s ease,box-shadow .15s ease;}.ds-input::placeholder{color:oklch(0.500 0.0197 50.6);}.ds-input:focus-visible{border-color:oklch(0.527 0.0656 50.6);box-shadow:0 0 0 2px oklch(0.527 0.0656 50.6 / .3);}"
     },
     {
+      "name": "Input Group (flat search)",
+      "kind": "input",
+      "refersTo": "input-group",
+      "description": "Field with a leading/trailing addon — the group owns the chrome, the inner input (Input ghost) stays borderless. The flat (ghost) variant has no border, fill, or halo: the shared search field for the Combobox popover and the rail's global filter.",
+      "html": "<div class=\"ds-input-group\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 256 256\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"18\" stroke-linecap=\"round\"><circle cx=\"116\" cy=\"116\" r=\"84\"/><line x1=\"175\" y1=\"175\" x2=\"224\" y2=\"224\"/></svg><input class=\"ds-input-group-input\" placeholder=\"Filter branches, tags…\" /></div>",
+      "css": ".ds-input-group{display:flex;align-items:center;gap:8px;height:32px;padding:0 4px;}.ds-input-group svg{flex:none;width:14px;height:14px;margin-left:8px;color:oklch(0.500 0.0197 50.6);}.ds-input-group-input{flex:1;min-width:0;border:none;background:transparent;font-family:'DM Sans Variable',sans-serif;font-size:.75rem;line-height:1.6;color:oklch(0.180 0.0131 50.6);outline:none;}.ds-input-group-input::placeholder{color:oklch(0.500 0.0197 50.6);}"
+    },
+    {
       "name": "Ref Pill",
       "kind": "chip",
       "refersTo": "ref-pill",
