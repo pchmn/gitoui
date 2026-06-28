@@ -125,14 +125,38 @@ describe('RepoRail global filter', () => {
 
     // Scope to the rail so the top-bar Branch selector (also a "main") never confuses the query.
     const rail = (await screen.findByText('Branches')).closest('aside') as HTMLElement;
-    // Wait for the async branch list to render under the header.
-    expect(await within(rail).findByText('feature/login')).toBeTruthy();
+    // Default view is tree: 'main' is a top-level leaf; 'feature/login' nests under a 'feature/'
+    // folder and its leaf reads as just its segment, 'login'.
+    expect(await within(rail).findByText('login')).toBeTruthy();
     expect(within(rail).getByText('main')).toBeTruthy();
 
     const filter = within(rail).getByRole('textbox', { name: /filter branches/i });
     fireEvent.change(filter, { target: { value: 'feat' } });
 
-    expect(within(rail).getByText('feature/login')).toBeTruthy();
+    // 'feature/login' matches 'feat' on its full name, so its leaf + folder stay; 'main' drops out.
+    expect(within(rail).getByText('login')).toBeTruthy();
     expect(within(rail).queryByText('main')).toBeNull();
+  });
+});
+
+describe('RepoRail branches view-mode toggle', () => {
+  it('defaults to tree, toggles to flat, persists to localStorage, and survives a remount', async () => {
+    render(<Wrapper root='/repo/my-project' />);
+    await screen.findByText('Branches');
+
+    // Nothing persisted yet → default is tree, so the control offers to switch to flat.
+    expect(localStorage.getItem('gitoui:branches-view-mode')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /switch to flat list view/i }));
+
+    // Now flat: the new mode is written and the control flips to offer tree.
+    expect(localStorage.getItem('gitoui:branches-view-mode')).toBe('flat');
+    expect(screen.getByRole('button', { name: /switch to tree view/i })).toBeTruthy();
+
+    // A fresh instance reads localStorage on mount and stays in flat mode.
+    cleanup();
+    render(<Wrapper root='/repo/my-project' />);
+    await screen.findByText('Branches');
+    expect(screen.getByRole('button', { name: /switch to tree view/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /switch to flat list view/i })).toBeNull();
   });
 });

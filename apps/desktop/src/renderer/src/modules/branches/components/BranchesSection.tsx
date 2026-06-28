@@ -1,25 +1,28 @@
-import type { Branch } from '@gitoui/contracts/git';
-import { cn } from '@gitoui/ui/lib/utils';
-import { useSelectedRef } from '#renderer/core/shell/SelectionContext';
 import type { GitError } from '#renderer/shared/git/errors';
 import { matchError } from '#renderer/shared/utils/matchError';
 import { useActiveRepository } from '../../repository/ActiveRepositoryContext';
 import { useBranches } from '../hooks/useBranches';
-import { useSwitchBranch } from '../hooks/useSwitchBranch';
-import { AheadBehindBadge } from './AheadBehindBadge';
+import { BranchRow } from './BranchRow';
+import { BranchTreeView } from './BranchTreeView';
 
 /**
- * Flat list of local Branches rendered in the Repository rail (issue #23 + #24).
- * Current Branch is pinned to top with Accent Surface + primary status dot. Branches with an
- * upstream show ahead/behind via `AheadBehindBadge`. The `filter` (case-insensitive substring on
- * name) is owned by the rail's global filter and passed in — the rail filters every section, not
- * just this one. Loading shows skeleton rows; empty shows a hint; error shows a quiet inline
- * message; Detached HEAD shows a banner with no current marker.
+ * Flat list (or recursive tree) of local Branches rendered in the Repository rail (issue #23 +
+ * #24 + #25). In flat mode, current Branch is pinned to top. In tree mode, Branches are grouped
+ * by `/`-separated prefix; current branch sits at its natural alpha position and its ancestor
+ * folders are auto-expanded. The `filter` (case-insensitive substring on name) is owned by the
+ * rail's global filter and passed in. Loading shows skeleton rows; empty shows a hint; error shows
+ * a quiet inline message; Detached HEAD shows a banner with no current marker.
  *
  * Interactions (issue #24): single-click = select (UI focus, for the future graph), double-click =
  * Switch (move HEAD). "Select" ≠ "Switch" — do not conflate in code or copy.
  */
-export function BranchesSection({ filter }: { filter: string }) {
+export function BranchesSection({
+  filter,
+  viewMode = 'flat',
+}: {
+  filter: string;
+  viewMode?: 'flat' | 'tree';
+}) {
   const { root } = useActiveRepository();
   const { data: branchList, isPending, isError, error } = useBranches(root);
 
@@ -47,17 +50,25 @@ export function BranchesSection({ filter }: { filter: string }) {
   const isDetached = head._tag === 'Detached';
 
   // Flat sort: current Branch pinned to top, then alpha by name (localeCompare).
-  // NOTE: tree view (slice #4) sorts differently — keep this isolated.
+  // In tree mode, buildTree handles ordering (leaves first, alpha) — keep this isolated.
   const sorted = [...branches].sort((a, b) => {
     if (a.isCurrent !== b.isCurrent) return a.isCurrent ? -1 : 1;
     return a.name.localeCompare(b.name);
   });
 
-  // Filter: case-insensitive substring on name.
+  // Filter: case-insensitive substring on name (flat mode only; tree mode filters inside BranchTreeView).
   const filtered =
     filter.trim() === ''
       ? sorted
       : sorted.filter((b) => b.name.toLowerCase().includes(filter.toLowerCase()));
+
+  // Empty state: for tree mode, check the unfiltered set (BranchTreeView handles its own filtering).
+  // For flat mode, check the filtered set.
+  const treeHasMatches =
+    filter.trim() === ''
+      ? branches.length > 0
+      : branches.some((b) => b.name.toLowerCase().includes(filter.toLowerCase()));
+  const isEmpty = viewMode === 'tree' ? !treeHasMatches : filtered.length === 0;
 
   return (
     <>
@@ -72,85 +83,30 @@ export function BranchesSection({ filter }: { filter: string }) {
       )}
 
       {/* Empty state — quiet Muted-Ink hint. */}
-      {filtered.length === 0 && (
+      {isEmpty && (
         <p className='px-3 py-1.5 text-xs text-muted-foreground'>
           {branches.length === 0 ? 'No branches yet.' : 'No branches match filter.'}
         </p>
       )}
 
-      {/* Branch list — div[role="listbox"] so child rows can use aria-selected (ARIA 1.2).
-          Native <ul> cannot carry role="listbox" per Biome noNoninteractiveElementToInteractiveRole. */}
-      <div role='listbox' aria-label='Branches' className='flex flex-col'>
-        {filtered.map((branch) => (
-          <BranchRow key={branch.name} branch={branch} isDetached={isDetached} />
-        ))}
-      </div>
+      {/* Tree view (issue #25) or flat list. */}
+      {viewMode === 'tree' && !isEmpty ? (
+        <BranchTreeView branches={branches} head={head} filter={filter} isDetached={isDetached} />
+      ) : viewMode === 'flat' && !isEmpty ? (
+        /* Branch list — div[role="listbox"] so child rows can use aria-selected (ARIA 1.2).
+           Native <ul> cannot carry role="listbox" per Biome noNoninteractiveElementToInteractiveRole. */
+        <div role='listbox' aria-label='Branches' className='flex flex-col'>
+          {filtered.map((branch) => (
+            <BranchRow key={branch.name} branch={branch} isDetached={isDetached} />
+          ))}
+        </div>
+      ) : null}
     </>
   );
 }
 
-/**
- * Single branch row — Accent Surface + primary dot when current; selected ring when focused via
- * single-click; Muted Surface on hover. Both `isCurrent` and `isSelected` can be true at once.
- *
- * Single-click = select (UI focus); double-click = Switch (move HEAD). Double-click on the current
- * Branch is a no-op (already checked out). No timer or debounce — selecting then switching the same
- * row is harmless.
- */
-function BranchRow({ branch, isDetached }: { branch: Branch; isDetached: boolean }) {
-  const { selectedRef, select } = useSelectedRef();
-  const { mutate: switchBranch } = useSwitchBranch();
-
-  // In Detached HEAD mode all isCurrent are false — no current marker.
-  const isCurrent = !isDetached && branch.isCurrent;
-  const isSelected = selectedRef === branch.name;
-
-  function handleClick() {
-    select(branch.name);
-  }
-
-  function handleDoubleClick() {
-    // Double-click on the current branch is a no-op.
-    if (isCurrent) return;
-    switchBranch(branch.name);
-  }
-
-  return (
-    // div[role="option"] is valid inside div[role="listbox"]; supports aria-selected + aria-current.
-    // Native <li> cannot carry role="option" per Biome noNoninteractiveElementToInteractiveRole.
-    // onKeyDown handles keyboard activation (Enter/Space = select) for keyboard-only navigation.
-    <div
-      role='option'
-      className={cn(
-        'flex h-7 cursor-default select-none items-center gap-2 px-3 text-xs hover:bg-muted',
-        isCurrent && 'bg-accent',
-        isSelected && 'ring-1 ring-inset ring-primary/50',
-      )}
-      aria-current={isCurrent ? 'true' : undefined}
-      aria-selected={isSelected}
-      tabIndex={0}
-      onClick={handleClick}
-      onDoubleClick={handleDoubleClick}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          handleClick();
-        }
-      }}
-    >
-      {/* Status dot — primary color when current, muted otherwise */}
-      <span
-        className={cn(
-          'size-1.5 shrink-0 rounded-full',
-          isCurrent ? 'bg-primary' : 'bg-muted-foreground/40',
-        )}
-        aria-hidden='true'
-      />
-      <span className='min-w-0 flex-1 truncate'>{branch.name}</span>
-      <AheadBehindBadge upstream={branch.upstream} ahead={branch.ahead} behind={branch.behind} />
-    </div>
-  );
-}
+// Re-export BranchRow so consumers can import it from this module if preferred.
+export { BranchRow } from './BranchRow';
 
 /** Skeleton rows shown during loading (no spinner — skeletons over spinners per issue #23). */
 function BranchesSkeleton() {
