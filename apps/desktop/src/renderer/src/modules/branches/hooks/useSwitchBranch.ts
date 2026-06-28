@@ -32,7 +32,8 @@ export function useSwitchBranch() {
         type: 'error',
         title: 'Could not switch branch',
         description: matchError<GitError<'switchBranch'>, string>(error, {
-          UncommittedChangesError: () => 'Commit or stash your changes first.',
+          UncommittedChangesError: () =>
+            'Working tree has uncommitted changes. Commit or stash them first.',
           RepoNotFoundError: () => 'Repository not found.',
           _: () => 'An unexpected error occurred.',
         }),
