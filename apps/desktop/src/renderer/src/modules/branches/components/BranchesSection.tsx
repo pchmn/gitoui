@@ -1,19 +1,23 @@
 import type { Branch } from '@gitoui/contracts/git';
 import { cn } from '@gitoui/ui/lib/utils';
+import { useSelectedRef } from '#renderer/core/shell/SelectionContext';
 import type { GitError } from '#renderer/shared/git/errors';
 import { matchError } from '#renderer/shared/utils/matchError';
 import { useActiveRepository } from '../../repository/ActiveRepositoryContext';
 import { useBranches } from '../hooks/useBranches';
+import { useSwitchBranch } from '../hooks/useSwitchBranch';
 import { AheadBehindBadge } from './AheadBehindBadge';
 
 /**
- * Flat, read-only list of local Branches rendered in the Repository rail (issue #23).
+ * Flat list of local Branches rendered in the Repository rail (issue #23 + #24).
  * Current Branch is pinned to top with Accent Surface + primary status dot. Branches with an
  * upstream show ahead/behind via `AheadBehindBadge`. The `filter` (case-insensitive substring on
  * name) is owned by the rail's global filter and passed in — the rail filters every section, not
  * just this one. Loading shows skeleton rows; empty shows a hint; error shows a quiet inline
- * message; Detached HEAD shows a banner with no current marker. Interaction (select/switch) is
- * deferred to the next slice.
+ * message; Detached HEAD shows a banner with no current marker.
+ *
+ * Interactions (issue #24): single-click = select (UI focus, for the future graph), double-click =
+ * Switch (move HEAD). "Select" ≠ "Switch" — do not conflate in code or copy.
  */
 export function BranchesSection({ filter }: { filter: string }) {
   const { root } = useActiveRepository();
@@ -74,28 +78,65 @@ export function BranchesSection({ filter }: { filter: string }) {
         </p>
       )}
 
-      {/* Branch list */}
-      <ul className='flex flex-col'>
+      {/* Branch list — div[role="listbox"] so child rows can use aria-selected (ARIA 1.2).
+          Native <ul> cannot carry role="listbox" per Biome noNoninteractiveElementToInteractiveRole. */}
+      <div role='listbox' aria-label='Branches' className='flex flex-col'>
         {filtered.map((branch) => (
           <BranchRow key={branch.name} branch={branch} isDetached={isDetached} />
         ))}
-      </ul>
+      </div>
     </>
   );
 }
 
-/** Single branch row — Accent Surface + primary dot when current; Muted Surface on hover. */
+/**
+ * Single branch row — Accent Surface + primary dot when current; selected ring when focused via
+ * single-click; Muted Surface on hover. Both `isCurrent` and `isSelected` can be true at once.
+ *
+ * Single-click = select (UI focus); double-click = Switch (move HEAD). Double-click on the current
+ * Branch is a no-op (already checked out). No timer or debounce — selecting then switching the same
+ * row is harmless.
+ */
 function BranchRow({ branch, isDetached }: { branch: Branch; isDetached: boolean }) {
+  const { selectedRef, select } = useSelectedRef();
+  const { mutate: switchBranch } = useSwitchBranch();
+
   // In Detached HEAD mode all isCurrent are false — no current marker.
   const isCurrent = !isDetached && branch.isCurrent;
+  const isSelected = selectedRef === branch.name;
+
+  function handleClick() {
+    select(branch.name);
+  }
+
+  function handleDoubleClick() {
+    // Double-click on the current branch is a no-op.
+    if (isCurrent) return;
+    switchBranch(branch.name);
+  }
 
   return (
-    <li
+    // div[role="option"] is valid inside div[role="listbox"]; supports aria-selected + aria-current.
+    // Native <li> cannot carry role="option" per Biome noNoninteractiveElementToInteractiveRole.
+    // onKeyDown handles keyboard activation (Enter/Space = select) for keyboard-only navigation.
+    <div
+      role='option'
       className={cn(
         'flex h-7 cursor-default select-none items-center gap-2 px-3 text-xs hover:bg-muted',
         isCurrent && 'bg-accent',
+        isSelected && 'ring-1 ring-inset ring-primary/50',
       )}
       aria-current={isCurrent ? 'true' : undefined}
+      aria-selected={isSelected}
+      tabIndex={0}
+      onClick={handleClick}
+      onDoubleClick={handleDoubleClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleClick();
+        }
+      }}
     >
       {/* Status dot — primary color when current, muted otherwise */}
       <span
@@ -107,7 +148,7 @@ function BranchRow({ branch, isDetached }: { branch: Branch; isDetached: boolean
       />
       <span className='min-w-0 flex-1 truncate'>{branch.name}</span>
       <AheadBehindBadge upstream={branch.upstream} ahead={branch.ahead} behind={branch.behind} />
-    </li>
+    </div>
   );
 }
 

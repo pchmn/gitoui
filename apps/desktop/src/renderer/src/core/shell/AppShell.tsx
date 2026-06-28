@@ -3,6 +3,7 @@ import { EmptyState } from '#renderer/modules/repository/components/EmptyState';
 import { RepositoryView } from '#renderer/modules/repository/components/RepositoryView';
 import { useReopenLastRepository } from '#renderer/modules/repository/hooks/useReopenLastRepository';
 import { RepoRail } from './RepoRail';
+import { SelectionProvider } from './SelectionContext';
 import { StatusBar } from './StatusBar';
 import { TopBar } from './TopBar';
 
@@ -21,16 +22,18 @@ export function AppShell() {
   const { isRestoring } = useReopenLastRepository();
 
   return (
-    <div className='flex h-screen flex-col bg-background text-foreground'>
-      <TopBar />
-      <div className='flex min-h-0 flex-1'>
-        {root !== null && <RepoRail />}
-        <main className='min-h-0 flex-1 overflow-auto'>
-          {root !== null ? <RepositoryView root={root} /> : isRestoring ? null : <EmptyState />}
-        </main>
-        {/* right inspector column slots here in a future slice */}
+    <SelectionProvider>
+      <div className='flex h-screen flex-col bg-background text-foreground'>
+        <TopBar />
+        <div className='flex min-h-0 flex-1'>
+          {root !== null && <RepoRail />}
+          <main className='min-h-0 flex-1 overflow-auto'>
+            {root !== null ? <RepositoryView root={root} /> : isRestoring ? null : <EmptyState />}
+          </main>
+          {/* right inspector column slots here in a future slice */}
+        </div>
+        <StatusBar />
       </div>
-      <StatusBar />
-    </div>
+    </SelectionProvider>
   );
 }
