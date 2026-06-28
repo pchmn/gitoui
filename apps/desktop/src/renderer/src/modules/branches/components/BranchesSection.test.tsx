@@ -41,11 +41,13 @@ function RootSetter({ root }: { root: string }) {
 function Wrapper({
   root = '/repo',
   filter = '',
+  viewMode,
   listBranchesMock,
   switchBranchMock,
 }: {
   root?: string;
   filter?: string;
+  viewMode?: 'flat' | 'tree';
   listBranchesMock: () => Promise<BranchList>;
   switchBranchMock?: () => Promise<void>;
 }) {
@@ -60,7 +62,7 @@ function Wrapper({
         <ActiveRepositoryProvider>
           <RootSetter root={root} />
           <SelectionProvider>
-            <BranchesSection filter={filter} />
+            <BranchesSection filter={filter} viewMode={viewMode} />
           </SelectionProvider>
         </ActiveRepositoryProvider>
         <Toaster />
@@ -117,6 +119,78 @@ describe('BranchesSection filter', () => {
     const items = screen.getAllByRole('option');
     expect(items).toHaveLength(1);
     expect(items[0]?.textContent?.trim()).toBe('feature/x');
+  });
+});
+
+describe('BranchesSection tree mode', () => {
+  it('filter shows only the matching leaf plus its ancestor folders, auto-expanded', async () => {
+    const branches = [
+      { name: 'main', isCurrent: false, ahead: 0, behind: 0 },
+      { name: 'feature/auth/login', isCurrent: false, ahead: 0, behind: 0 },
+      { name: 'feature/auth/logout', isCurrent: false, ahead: 0, behind: 0 },
+      { name: 'feature/pay-fallback', isCurrent: false, ahead: 0, behind: 0 },
+    ];
+    render(
+      <Wrapper
+        viewMode='tree'
+        filter='logout'
+        listBranchesMock={() =>
+          Promise.resolve(makeBranchList({ branches, head: { _tag: 'OnBranch', branch: 'main' } }))
+        }
+      />,
+    );
+
+    // Only the matching branch survives the filter, rendered as one leaf showing its segment.
+    const options = await screen.findAllByRole('option');
+    expect(options).toHaveLength(1);
+    expect(options[0]?.textContent?.trim()).toBe('logout');
+
+    // Its two ancestor folders (feature/ then auth/) are shown and auto-expanded; the non-matching
+    // siblings ('main', 'feature/pay-fallback', 'feature/auth/login') are hidden.
+    const folders = screen.getAllByRole('button');
+    expect(folders).toHaveLength(2);
+    for (const folder of folders) {
+      expect(folder.getAttribute('aria-expanded')).toBe('true');
+    }
+    expect(screen.queryByText('login')).toBeNull();
+    expect(screen.queryByText('main')).toBeNull();
+    expect(screen.queryByText('pay-fallback')).toBeNull();
+  });
+});
+
+describe('BranchesSection tree mode — current group', () => {
+  it('collapses a folder that holds the current branch and marks it so the group stays findable', async () => {
+    const branches = [
+      { name: 'main', isCurrent: false, ahead: 0, behind: 0 },
+      { name: 'feat/8-shell', isCurrent: false, ahead: 0, behind: 0 },
+      { name: 'feat/25-tree', isCurrent: true, ahead: 0, behind: 0 },
+    ];
+    render(
+      <Wrapper
+        viewMode='tree'
+        listBranchesMock={() =>
+          Promise.resolve(
+            makeBranchList({ branches, head: { _tag: 'OnBranch', branch: 'feat/25-tree' } }),
+          )
+        }
+      />,
+    );
+
+    // On load the feat/ group is open, the current branch is visible (and floated to the top), and
+    // the group is NOT marked (no need — the current row is on screen).
+    await screen.findByText('25-tree');
+    const featFolder = screen.getByRole('button');
+    expect(featFolder.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.queryByTitle(/contains the current branch/i)).toBeNull();
+
+    // Collapsing is allowed even though the group holds the current branch.
+    fireEvent.click(featFolder);
+    expect(featFolder.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByText('25-tree')).toBeNull();
+    expect(screen.queryByText('8-shell')).toBeNull();
+
+    // The collapsed folder is now marked as the current group.
+    expect(screen.getByTitle(/contains the current branch/i)).toBe(featFolder);
   });
 });
 
