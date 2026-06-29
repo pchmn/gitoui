@@ -1,5 +1,6 @@
 import { Button } from '@gitoui/ui/button';
 import { FolderOpenIcon } from '@phosphor-icons/react';
+import { messages } from '#renderer/shared/messages/messages';
 import { useOpenRepository } from '../hooks/useOpenRepository';
 
 /**
@@ -21,7 +22,7 @@ export function RepositoryView({ root }: { root: string }) {
       </div>
       <Button variant='outline' onClick={openRepository} disabled={isOpening}>
         <FolderOpenIcon data-icon='inline-start' />
-        Open another repository…
+        {messages.repositoryView.openAnotherCta}
       </Button>
     </div>
   );

@@ -1,6 +1,7 @@
 import { toast } from '@gitoui/ui/toast';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { GitError } from '#renderer/shared/git/errors';
+import { messages } from '#renderer/shared/messages/messages';
 import { matchError } from '#renderer/shared/utils/matchError';
 import { useActiveRepository } from '../../repository/ActiveRepositoryContext';
 import { branchesKey } from './useBranches';
@@ -30,12 +31,11 @@ export function useSwitchBranch() {
     onError: (error) => {
       toast.add({
         type: 'error',
-        title: 'Could not switch branch',
+        title: messages.errors.switchBranch.title,
         description: matchError<GitError<'switchBranch'>, string>(error, {
-          UncommittedChangesError: () =>
-            'Working tree has uncommitted changes. Commit or stash them first.',
-          RepoNotFoundError: () => 'Repository not found.',
-          _: () => 'An unexpected error occurred.',
+          UncommittedChangesError: () => messages.errors.byTag.uncommittedChanges,
+          RepoNotFoundError: () => messages.errors.byTag.repoNotFound,
+          _: () => messages.errors.byTag.unexpected,
         }),
       });
     },

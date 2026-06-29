@@ -1,12 +1,8 @@
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@gitoui/ui/input-group';
-import {
-  GitBranchIcon,
-  ListBulletsIcon,
-  MagnifyingGlassIcon,
-  TreeStructureIcon,
-} from '@phosphor-icons/react';
+import { GitBranchIcon, ListBulletsIcon, MagnifyingGlassIcon } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { BranchesSection } from '#renderer/modules/branches/components/BranchesSection';
+import { messages } from '#renderer/shared/messages/messages';
 import { ResizeHandle } from './ResizeHandle';
 import { useResizable } from './useResizable';
 
@@ -72,8 +68,8 @@ function RailFilter({ value, onChange }: { value: string; onChange: (next: strin
       <InputGroupInput
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        placeholder='Filter branches, tags…'
-        aria-label='Filter branches and tags'
+        placeholder={messages.repoRail.filterPlaceholder}
+        aria-label={messages.repoRail.filterAria}
         className='text-xs/relaxed'
       />
     </InputGroup>
@@ -94,7 +90,7 @@ function BranchesSectionShell({
     <section>
       <header className='flex h-8 items-center gap-1.5 px-3 pr-2 text-xs font-medium text-muted-foreground'>
         <GitBranchIcon className='size-3.5 shrink-0' />
-        <span className='flex-1'>Branches</span>
+        <span className='flex-1'>{messages.repoRail.branchesHeading}</span>
         {/* Toggle shows the icon for the OPPOSITE view (what clicking will switch to). */}
         <button
           type='button'

@@ -1,6 +1,7 @@
 import { toast } from '@gitoui/ui/toast';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { GitError } from '#renderer/shared/git/errors';
+import { messages } from '#renderer/shared/messages/messages';
 import { matchError } from '#renderer/shared/utils/matchError';
 import { useActiveRepository } from '../ActiveRepositoryContext';
 import { RECENT_REPOSITORIES_KEY } from './useRecentRepositories';
@@ -31,10 +32,10 @@ export function useActivateRepository() {
     onError: (error, path) => {
       toast.add({
         type: 'error',
-        title: 'Could not open repository',
+        title: messages.errors.activateRepository.title,
         description: matchError<GitError<'resolveRepository'>, string>(error, {
-          NotARepositoryError: (e) => `${e.path} is not a git repository.`,
-          _: () => `${path} could not be opened.`,
+          NotARepositoryError: (e) => messages.errors.byTag.notARepository(e.path),
+          _: () => messages.errors.activateRepository.repoNotFound(path),
         }),
       });
     },
