@@ -1,6 +1,6 @@
 import type { Branch } from '@gitoui/contracts/git';
 import { cn } from '@gitoui/ui/lib/utils';
-import { useSelectedRef } from '#renderer/core/shell/SelectionContext';
+import { useSelection } from '#renderer/core/shell/SelectionContext';
 import { useSwitchBranch } from '../hooks/useSwitchBranch';
 import { AheadBehindBadge } from './AheadBehindBadge';
 
@@ -15,6 +15,9 @@ import { AheadBehindBadge } from './AheadBehindBadge';
  * Shared between flat list (BranchesSection) and tree view (BranchTreeView) as leaves. Flat mode
  * shows the full `branch.name`; tree mode passes `label={segment}` so the leaf reads as just its
  * own path segment under its folder (the full name stays available as the row `title`).
+ *
+ * Selection is keyed by `{ kind: 'branch', id: branch.name }` so a Tag and a Branch sharing a
+ * name don't both highlight (issue #33).
  */
 export function BranchRow({
   branch,
@@ -25,15 +28,17 @@ export function BranchRow({
   isDetached: boolean;
   label?: string;
 }) {
-  const { selectedRef, select } = useSelectedRef();
+  const { isSelected, select } = useSelection();
   const { mutate: switchBranch } = useSwitchBranch();
+
+  const sel = { kind: 'branch' as const, id: branch.name };
 
   // In Detached HEAD mode all isCurrent are false — no current marker.
   const isCurrent = !isDetached && branch.isCurrent;
-  const isSelected = selectedRef === branch.name;
+  const isRowSelected = isSelected(sel);
 
   function handleClick() {
-    select(branch.name);
+    select(sel);
   }
 
   function handleDoubleClick() {
@@ -51,10 +56,10 @@ export function BranchRow({
       className={cn(
         'flex h-7 cursor-default select-none items-center gap-2 px-3 text-xs hover:bg-muted rounded-sm',
         isCurrent && 'bg-accent',
-        isSelected && 'ring-1 ring-inset ring-primary/50',
+        isRowSelected && 'ring-1 ring-inset ring-primary/50',
       )}
       aria-current={isCurrent ? 'true' : undefined}
-      aria-selected={isSelected}
+      aria-selected={isRowSelected}
       tabIndex={0}
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}

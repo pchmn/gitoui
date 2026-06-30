@@ -40,8 +40,16 @@ _Avoid_: revision, changeset.
 A movable named pointer to a Commit. A *local branch* vs a *remote-tracking branch* (e.g. `origin/main`).
 _Avoid_: using "ref" when you specifically mean a branch.
 
+**Remote-tracking branch**:
+A read-only local pointer recording where a Branch stood on a Remote at the last fetch (e.g. `origin/main`), under `refs/remotes/`. Distinct from a local Branch: it has no upstream of its own, so ahead/behind don't apply to it.
+_Avoid_: "remote branch" (ambiguous with the actual branch living on the server).
+
 **Ref**:
-Any named pointer — a Branch, a tag, or a remote-tracking branch. **HEAD** is the pointer to the currently checked-out Commit/Branch.
+Any named pointer — a Branch, a Tag, or a remote-tracking branch. **HEAD** is the pointer to the currently checked-out Commit/Branch.
+
+**Tag**:
+A Ref that names a specific Commit permanently — *lightweight* (a bare pointer) or *annotated* (a tag object carrying a tagger and message). Unlike a Branch, it does not move as new commits land.
+_Avoid_: "release" (a Tag is not necessarily a release), "version".
 
 **Detached HEAD**:
 The state where HEAD points directly at a Commit instead of a local Branch — no Branch is current. The branch selector surfaces it read-only as `detached @ <sha>` and highlights nothing.
