@@ -15,6 +15,7 @@ export const CHANNELS = {
     listBranches: 'git:listBranches',
     switchBranch: 'git:switchBranch',
     createBranch: 'git:createBranch',
+    listRemotes: 'git:listRemotes',
   },
   desktop: {
     pickRepository: 'desktop:pickRepository',

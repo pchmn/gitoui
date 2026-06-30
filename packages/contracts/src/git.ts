@@ -104,6 +104,21 @@ export const Branch = Schema.Struct({
   ahead: Schema.Number,
   behind: Schema.Number,
 });
+
+/** A remote-tracking branch. `name` is WITHOUT the remote prefix (`main`, not `origin/main`). */
+export const RemoteTrackingBranch = Schema.Struct({ name: Schema.String });
+export type RemoteTrackingBranch = typeof RemoteTrackingBranch.Type;
+
+/** A remote connection (e.g. `origin`) with its fetched remote-tracking branches. */
+export const Remote = Schema.Struct({
+  name: Schema.String,
+  branches: Schema.Array(RemoteTrackingBranch),
+});
+export type Remote = typeof Remote.Type;
+
+/** The result of `listRemotes`: all configured remotes with their remote-tracking branches. */
+export const RemoteList = Schema.Struct({ remotes: Schema.Array(Remote) });
+export type RemoteList = typeof RemoteList.Type;
 export type Branch = typeof Branch.Type;
 
 /** Where HEAD points: a local Branch, or a bare Commit (Detached HEAD). */
@@ -173,4 +188,16 @@ export const createBranch = defineMethod({
   payload: CreateBranchInput,
   success: Schema.Void,
   error: Schema.Union(RepoNotFoundError, BranchExistsError, InvalidBranchNameError),
+});
+
+/**
+ * List all configured remotes with their remote-tracking branches. Remote-tracking branch names
+ * are stored WITHOUT the remote prefix (`main`, not `origin/main`) — already grouped under
+ * their remote. `origin/HEAD` symbolic refs are excluded. A remote with zero fetched branches
+ * still appears with an empty `branches` array.
+ */
+export const listRemotes = defineMethod({
+  payload: RepoInput,
+  success: RemoteList,
+  error: RepoNotFoundError,
 });
