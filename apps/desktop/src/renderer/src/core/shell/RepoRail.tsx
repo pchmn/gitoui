@@ -9,6 +9,7 @@ import {
   HardDrivesIcon,
   ListBulletsIcon,
   MagnifyingGlassIcon,
+  TagIcon,
 } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
@@ -17,6 +18,8 @@ import { useBranches } from '#renderer/modules/branches/hooks/useBranches';
 import { RemotesSection } from '#renderer/modules/remotes/components/RemotesSection';
 import { useRemotes } from '#renderer/modules/remotes/hooks/useRemotes';
 import { useActiveRepository } from '#renderer/modules/repository/ActiveRepositoryContext';
+import { TagsSection } from '#renderer/modules/tags/components/TagsSection';
+import { useTags } from '#renderer/modules/tags/hooks/useTags';
 import { messages } from '#renderer/shared/messages/messages';
 import { RailSection } from './RailSection';
 import { ResizeHandle } from './ResizeHandle';
@@ -85,6 +88,17 @@ export function RepoRail() {
     localStorage.setItem(SECTION_OPEN_KEY('remotes'), String(open));
   }
 
+  // Per-section open state for Tags. Default: open.
+  const [tagsOpen, setTagsOpen] = useState<boolean>(() => {
+    const stored = localStorage.getItem(SECTION_OPEN_KEY('tags'));
+    return stored === null ? true : stored === 'true';
+  });
+
+  function handleTagsOpenChange(open: boolean) {
+    setTagsOpen(open);
+    localStorage.setItem(SECTION_OPEN_KEY('tags'), String(open));
+  }
+
   return (
     <aside className='relative flex shrink-0 flex-col bg-card' style={{ width }}>
       <RailFilter
@@ -94,7 +108,7 @@ export function RepoRail() {
         onToggleViewMode={toggleViewMode}
       />
       <div className='border-b border-border' />
-      <div className='min-h-0 flex-1 overflow-y-auto flex flex-col gap-2'>
+      <div className='min-h-0 flex-1 overflow-y-auto flex flex-col gap-1'>
         <BranchesSectionShell
           filter={filter}
           viewMode={viewMode}
@@ -107,6 +121,7 @@ export function RepoRail() {
           open={remotesOpen}
           onOpenChange={handleRemotesOpenChange}
         />
+        <TagsSectionShell filter={filter} open={tagsOpen} onOpenChange={handleTagsOpenChange} />
       </div>
       <ResizeHandle side='left' isDragging={isDragging} {...handleProps} />
     </aside>
@@ -135,7 +150,7 @@ function RailFilter({
   return (
     <InputGroup variant='ghost' className='py-1 px-1'>
       <InputGroupAddon>
-        <MagnifyingGlassIcon />
+        <MagnifyingGlassIcon weight='regular' />
       </InputGroupAddon>
       <InputGroupInput
         value={value}
@@ -215,7 +230,7 @@ function BranchesSectionShell({
         return (
           <RailSection
             id='branches'
-            icon={<GitBranchIcon />}
+            icon={<GitBranchIcon weight='duotone' />}
             label={messages.repoRail.branchesHeading}
             count={count}
             open={effectiveOpen}
@@ -289,7 +304,7 @@ function RemotesSectionShell({
         return (
           <RailSection
             id='remotes'
-            icon={<HardDrivesIcon />}
+            icon={<HardDrivesIcon weight='duotone' />}
             label={messages.repoRail.remotesHeading}
             count={count}
             open={effectiveOpen}
@@ -304,6 +319,72 @@ function RemotesSectionShell({
         );
       }}
     </RemotesSectionCount>
+  );
+}
+
+/**
+ * Render-prop helper that reads the tags query to provide the count badge and match flag
+ * without duplicating the hook call into every consumer.
+ */
+function TagsSectionCount({
+  filter,
+  children,
+}: {
+  filter: string;
+  children: (count: number, hasMatch: boolean) => ReactNode;
+}) {
+  const { root } = useActiveRepository();
+  const { data: tagList } = useTags(root);
+
+  const tags = tagList?.tags ?? [];
+  const count = tags.length;
+  const lowerFilter = filter.toLowerCase().trim();
+  const hasMatch =
+    lowerFilter === '' || tags.some((t) => t.name.toLowerCase().includes(lowerFilter));
+
+  return children(count, hasMatch);
+}
+
+/**
+ * Tags section — uses `RailSection` for the collapsible header with count badge. Always flat —
+ * ignores the rail-global flat/tree mode. Auto-expands while a filter is active and there are
+ * matches. A section with no matches is hidden while a filter is active.
+ */
+function TagsSectionShell({
+  filter,
+  open,
+  onOpenChange,
+}: {
+  filter: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const isFiltering = filter.trim() !== '';
+  const effectiveOpen = isFiltering ? true : open;
+
+  return (
+    <TagsSectionCount filter={filter}>
+      {(count, hasMatch) => {
+        if (isFiltering && !hasMatch) return null;
+
+        return (
+          <RailSection
+            id='tags'
+            icon={<TagIcon weight='duotone' />}
+            label={messages.repoRail.tagsHeading}
+            count={count}
+            open={effectiveOpen}
+            onOpenChange={(next) => {
+              if (!isFiltering) {
+                onOpenChange(next);
+              }
+            }}
+          >
+            <TagsSection filter={filter} />
+          </RailSection>
+        );
+      }}
+    </TagsSectionCount>
   );
 }
 

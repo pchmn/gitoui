@@ -23,6 +23,7 @@ export const messages = {
   repoRail: {
     branchesHeading: 'Branches',
     remotesHeading: 'Remotes',
+    tagsHeading: 'Tags',
     filterPlaceholder: 'Filter branches, tags…',
     filterAria: 'Filter branches and tags',
   },
@@ -52,6 +53,12 @@ export const messages = {
     repoNotFound: (path: string) => `Repository not found: ${path}`,
     emptyYet: 'No remotes configured.',
     emptyFiltered: 'No remotes match filter.',
+  },
+  tagsSection: {
+    failedToLoad: 'Failed to load tags.',
+    repoNotFound: (path: string) => `Repository not found: ${path}`,
+    emptyYet: 'No tags yet.',
+    emptyFiltered: 'No tags match filter.',
   },
   branchSelector: {
     filterPlaceholder: 'Filter branches…',
