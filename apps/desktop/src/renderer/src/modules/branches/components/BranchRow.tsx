@@ -54,7 +54,7 @@ export function BranchRow({
     <div
       role='option'
       className={cn(
-        'flex h-7 cursor-default select-none items-center gap-2 px-3 text-xs hover:bg-muted rounded-sm',
+        'flex h-7 cursor-default select-none items-center gap-1.5 px-3 text-xs hover:bg-muted rounded-sm',
         isCurrent && 'bg-accent',
         isRowSelected && 'ring-1 ring-inset ring-primary/50',
       )}
@@ -70,14 +70,17 @@ export function BranchRow({
         }
       }}
     >
-      {/* Status dot — primary color when current, muted otherwise */}
-      <span
-        className={cn(
-          'size-1.5 shrink-0 rounded-full',
-          isCurrent ? 'bg-primary' : 'bg-muted-foreground/40',
-        )}
-        aria-hidden='true'
-      />
+      {/* Status dot — primary color when current, muted otherwise. Wrapped in a size-3 slot
+          (the chevron's footprint) so the dot's center aligns with a folder row's caret in tree
+          view, and leaf/folder labels line up. */}
+      <span className='flex size-3 shrink-0 items-center justify-center' aria-hidden='true'>
+        <span
+          className={cn(
+            'size-1.5 rounded-full',
+            isCurrent ? 'bg-primary' : 'bg-muted-foreground/40',
+          )}
+        />
+      </span>
       <span className='min-w-0 flex-1 truncate' title={branch.name}>
         {label ?? branch.name}
       </span>

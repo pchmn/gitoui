@@ -4,11 +4,18 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from '@gitoui/ui/input-group';
-import { GitBranchIcon, ListBulletsIcon, MagnifyingGlassIcon } from '@phosphor-icons/react';
+import {
+  GitBranchIcon,
+  HardDrivesIcon,
+  ListBulletsIcon,
+  MagnifyingGlassIcon,
+} from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { BranchesSection } from '#renderer/modules/branches/components/BranchesSection';
 import { useBranches } from '#renderer/modules/branches/hooks/useBranches';
+import { RemotesSection } from '#renderer/modules/remotes/components/RemotesSection';
+import { useRemotes } from '#renderer/modules/remotes/hooks/useRemotes';
 import { useActiveRepository } from '#renderer/modules/repository/ActiveRepositoryContext';
 import { messages } from '#renderer/shared/messages/messages';
 import { RailSection } from './RailSection';
@@ -67,6 +74,17 @@ export function RepoRail() {
     localStorage.setItem(SECTION_OPEN_KEY('branches'), String(open));
   }
 
+  // Per-section open state for Remotes. Default: open.
+  const [remotesOpen, setRemotesOpen] = useState<boolean>(() => {
+    const stored = localStorage.getItem(SECTION_OPEN_KEY('remotes'));
+    return stored === null ? true : stored === 'true';
+  });
+
+  function handleRemotesOpenChange(open: boolean) {
+    setRemotesOpen(open);
+    localStorage.setItem(SECTION_OPEN_KEY('remotes'), String(open));
+  }
+
   return (
     <aside className='relative flex shrink-0 flex-col bg-card' style={{ width }}>
       <RailFilter
@@ -76,12 +94,18 @@ export function RepoRail() {
         onToggleViewMode={toggleViewMode}
       />
       <div className='border-b border-border' />
-      <div className='min-h-0 flex-1 overflow-y-auto'>
+      <div className='min-h-0 flex-1 overflow-y-auto flex flex-col gap-2'>
         <BranchesSectionShell
           filter={filter}
           viewMode={viewMode}
           open={branchesOpen}
           onOpenChange={handleBranchesOpenChange}
+        />
+        <RemotesSectionShell
+          filter={filter}
+          viewMode={viewMode}
+          open={remotesOpen}
+          onOpenChange={handleRemotesOpenChange}
         />
       </div>
       <ResizeHandle side='left' isDragging={isDragging} {...handleProps} />
@@ -207,6 +231,79 @@ function BranchesSectionShell({
         );
       }}
     </BranchesSectionCount>
+  );
+}
+
+/**
+ * Render-prop helper that reads the remotes query to provide the count badge and match flag
+ * without duplicating the hook call into every consumer.
+ */
+function RemotesSectionCount({
+  filter,
+  children,
+}: {
+  filter: string;
+  children: (count: number, hasMatch: boolean) => ReactNode;
+}) {
+  const { root } = useActiveRepository();
+  const { data: remoteList } = useRemotes(root);
+
+  const remotes = remoteList?.remotes ?? [];
+  const count = remotes.length;
+  const lowerFilter = filter.toLowerCase().trim();
+  const hasMatch =
+    lowerFilter === '' ||
+    remotes.some(
+      (r) =>
+        r.name.toLowerCase().includes(lowerFilter) ||
+        r.branches.some((b) => b.name.toLowerCase().includes(lowerFilter)),
+    );
+
+  return children(count, hasMatch);
+}
+
+/**
+ * Remotes section — uses `RailSection` for the collapsible header with count badge. Auto-expands
+ * while a filter is active and there are matches. A section with no matches is hidden while a
+ * filter is active.
+ */
+function RemotesSectionShell({
+  filter,
+  viewMode,
+  open,
+  onOpenChange,
+}: {
+  filter: string;
+  viewMode: 'flat' | 'tree';
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const isFiltering = filter.trim() !== '';
+  const effectiveOpen = isFiltering ? true : open;
+
+  return (
+    <RemotesSectionCount filter={filter}>
+      {(count, hasMatch) => {
+        if (isFiltering && !hasMatch) return null;
+
+        return (
+          <RailSection
+            id='remotes'
+            icon={<HardDrivesIcon />}
+            label={messages.repoRail.remotesHeading}
+            count={count}
+            open={effectiveOpen}
+            onOpenChange={(next) => {
+              if (!isFiltering) {
+                onOpenChange(next);
+              }
+            }}
+          >
+            <RemotesSection filter={filter} viewMode={viewMode} />
+          </RailSection>
+        );
+      }}
+    </RemotesSectionCount>
   );
 }
 

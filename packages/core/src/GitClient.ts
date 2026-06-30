@@ -1,4 +1,11 @@
-import type { Branch, BranchList, ResolvedRepository, Status } from '@gitoui/contracts/git';
+import type {
+  Branch,
+  BranchList,
+  Remote,
+  RemoteList,
+  ResolvedRepository,
+  Status,
+} from '@gitoui/contracts/git';
 import {
   BranchExistsError,
   InvalidBranchNameError,
@@ -50,6 +57,43 @@ export function parseForEachRef(stdout: string): {
   }
 
   return { branches, currentBranchName };
+}
+
+/**
+ * Parse the output of `git for-each-ref --format=%(refname:lstrip=2) refs/remotes` into a map
+ * of remote name → tracking branch names (WITHOUT the remote prefix), dropping `origin/HEAD`
+ * symbolic refs.
+ *
+ * Each line is `remote/branch` (e.g. `origin/main`). Split on the first `/` to extract the
+ * remote name and branch segment. Lines with no `/` (malformed) are skipped.
+ *
+ * Pure function — no IO — so it can be unit-tested against pinned output without spawning git.
+ */
+export function parseRemoteTrackingRefs(stdout: string): Map<string, string[]> {
+  const remoteMap = new Map<string, string[]>();
+
+  for (const line of stdout.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    const slashIdx = trimmed.indexOf('/');
+    if (slashIdx === -1) continue;
+
+    const remoteName = trimmed.slice(0, slashIdx);
+    const branchName = trimmed.slice(slashIdx + 1);
+
+    // Drop symbolic refs like origin/HEAD.
+    if (branchName === 'HEAD') continue;
+
+    const existing = remoteMap.get(remoteName);
+    if (existing) {
+      existing.push(branchName);
+    } else {
+      remoteMap.set(remoteName, [branchName]);
+    }
+  }
+
+  return remoteMap;
 }
 
 /**
@@ -184,5 +228,33 @@ export class GitClient extends Effect.Service<GitClient>()('@gitoui/core/GitClie
             },
           ),
         ),
+
+    /**
+     * List all configured remotes with their remote-tracking branches (issue #34).
+     *
+     * Two calls:
+     * 1. `for-each-ref refs/remotes` — yields every tracking ref as `remote/branch`; `origin/HEAD`
+     *    symbolic refs are dropped; split on the first `/` into `{ remote, branchName }`.
+     * 2. `getRemotes()` — the authoritative list of configured remotes so that a remote with zero
+     *    fetched branches still appears (`branches: []`).
+     *
+     * Maps `GitProcessError` → `RepoNotFoundError`, same as `listBranches`.
+     */
+    listRemotes: (repoPath: string): Effect.Effect<RemoteList, RepoNotFoundError> =>
+      withGit(repoPath, async (git) => {
+        const [refsOut, configuredRemotes] = await Promise.all([
+          git.raw(['for-each-ref', '--format=%(refname:lstrip=2)', 'refs/remotes']),
+          git.getRemotes(),
+        ]);
+
+        const trackingMap = parseRemoteTrackingRefs(refsOut);
+
+        const remotes: Remote[] = configuredRemotes.map((r) => ({
+          name: r.name,
+          branches: (trackingMap.get(r.name) ?? []).map((name) => ({ name })),
+        }));
+
+        return { remotes } satisfies RemoteList;
+      }).pipe(Effect.catchTag('GitProcessError', () => new RepoNotFoundError({ path: repoPath }))),
   },
 }) {}

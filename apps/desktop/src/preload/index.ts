@@ -6,6 +6,7 @@ import type {
 import type {
   BranchList,
   CreateBranchInput,
+  RemoteList,
   RepoInput,
   ResolvedRepository,
   ResolveRepositoryInput,
@@ -51,6 +52,8 @@ const git = {
     invoke(CHANNELS.git.switchBranch, input) as Promise<void>,
   createBranch: (input: CreateBranchInput): Promise<void> =>
     invoke(CHANNELS.git.createBranch, input) as Promise<void>,
+  listRemotes: (input: RepoInput): Promise<RemoteList> =>
+    invoke(CHANNELS.git.listRemotes, input) as Promise<RemoteList>,
 };
 
 const desktop = {

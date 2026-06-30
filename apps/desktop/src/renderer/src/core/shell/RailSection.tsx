@@ -36,7 +36,7 @@ export function RailSection({
 }: RailSectionProps) {
   return (
     <CollapsibleRoot open={open} onOpenChange={onOpenChange} className='flex flex-col'>
-      <CollapsibleTrigger className='flex h-8 w-full items-center gap-1.5 px-3 pr-2 text-xs font-medium text-muted-foreground hover:text-foreground'>
+      <CollapsibleTrigger className='flex h-8 w-full items-center gap-1.5 px-3 pr-2 text-xs font-bold text-muted-foreground hover:text-foreground'>
         {/* Chevron — CaretRight when closed, CaretDown when open (matches tree folder pattern). */}
         {open ? (
           <CaretDownIcon className='size-3 shrink-0' aria-hidden='true' />

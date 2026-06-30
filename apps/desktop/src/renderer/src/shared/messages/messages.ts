@@ -22,6 +22,7 @@ export const messages = {
   },
   repoRail: {
     branchesHeading: 'Branches',
+    remotesHeading: 'Remotes',
     filterPlaceholder: 'Filter branches, tags…',
     filterAria: 'Filter branches and tags',
   },
@@ -45,6 +46,12 @@ export const messages = {
     emptyYet: 'No branches yet.',
     emptyFiltered: 'No branches match filter.',
     detached: (sha: string) => `detached @ ${sha}`,
+  },
+  remotesSection: {
+    failedToLoad: 'Failed to load remotes.',
+    repoNotFound: (path: string) => `Repository not found: ${path}`,
+    emptyYet: 'No remotes configured.',
+    emptyFiltered: 'No remotes match filter.',
   },
   branchSelector: {
     filterPlaceholder: 'Filter branches…',

@@ -5,7 +5,12 @@ import { join } from 'node:path';
 import { it } from '@effect/vitest';
 import { Effect } from 'effect';
 import { afterAll, beforeAll, describe, expect } from 'vitest';
-import { GitClient, parseForEachRef, parseOverwriteError } from './GitClient.ts';
+import {
+  GitClient,
+  parseForEachRef,
+  parseOverwriteError,
+  parseRemoteTrackingRefs,
+} from './GitClient.ts';
 
 // --- parseForEachRef unit tests (pure, pinned output) ---
 
@@ -394,6 +399,122 @@ describe('GitClient.createBranch', () => {
       if (error._tag === 'InvalidBranchNameError') {
         expect(error.name).toBe('bad..name');
       }
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+});
+
+// --- parseRemoteTrackingRefs unit tests (pure, pinned output) ---
+
+describe('parseRemoteTrackingRefs', () => {
+  // Pinned output per issue spec: `for-each-ref refs/remotes` yields one line per tracking ref.
+  const PINNED = ['origin/HEAD', 'origin/feat/x', 'origin/main'].join('\n');
+
+  it('drops origin/HEAD and returns feat/x and main under origin', () => {
+    const result = parseRemoteTrackingRefs(PINNED);
+    const originBranches = result.get('origin') ?? [];
+    expect(originBranches).not.toContain('HEAD');
+    expect(originBranches).toContain('feat/x');
+    expect(originBranches).toContain('main');
+    expect(originBranches).toHaveLength(2);
+  });
+
+  it('groups branches under their remote prefix', () => {
+    const MULTI = ['origin/main', 'upstream/main', 'upstream/dev'].join('\n');
+    const result = parseRemoteTrackingRefs(MULTI);
+    expect(result.get('origin')).toEqual(['main']);
+    expect(result.get('upstream')).toEqual(['main', 'dev']);
+  });
+
+  it('handles nested branch names (e.g. feat/x) — only splits on the first slash', () => {
+    const result = parseRemoteTrackingRefs('origin/feat/nested/deep');
+    expect(result.get('origin')).toEqual(['feat/nested/deep']);
+  });
+
+  it('returns an empty map for empty input', () => {
+    expect(parseRemoteTrackingRefs('').size).toBe(0);
+    expect(parseRemoteTrackingRefs('   ').size).toBe(0);
+  });
+});
+
+// --- GitClient.listRemotes integration tests ---
+
+describe('GitClient.listRemotes', () => {
+  let base: string;
+  /** Local working repo */
+  let local: string;
+  /** A bare "origin" remote */
+  let originRemote: string;
+  /** A bare "upstream" remote (no fetched branches — only configured, not fetched) */
+  let upstreamRemote: string;
+
+  const g = (cwd: string, ...args: string[]) =>
+    execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+
+  beforeAll(() => {
+    base = realpathSync(mkdtempSync(join(tmpdir(), 'gitoui-remotes-')));
+    originRemote = join(base, 'origin.git');
+    upstreamRemote = join(base, 'upstream.git');
+    local = join(base, 'local');
+
+    // Set up bare remotes.
+    execFileSync('git', ['init', '-q', '--bare', '-b', 'main', originRemote], { cwd: base });
+    execFileSync('git', ['init', '-q', '--bare', '-b', 'main', upstreamRemote], { cwd: base });
+
+    // Clone origin into local.
+    execFileSync('git', ['clone', '-q', originRemote, local], { cwd: base });
+    execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: local });
+    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: local });
+
+    // Make an initial commit and push to origin/main.
+    writeFileSync(join(local, 'a.txt'), 'a');
+    g(local, 'add', 'a.txt');
+    g(local, 'commit', '-m', 'init');
+    g(local, 'push', '-u', 'origin', 'main');
+
+    // Create a feat/x branch and push it to origin.
+    g(local, 'checkout', '-b', 'feat/x');
+    writeFileSync(join(local, 'b.txt'), 'b');
+    g(local, 'add', 'b.txt');
+    g(local, 'commit', '-m', 'feat');
+    g(local, 'push', '-u', 'origin', 'feat/x');
+    g(local, 'checkout', 'main');
+
+    // Add upstream as a remote but do NOT fetch (zero tracking branches).
+    g(local, 'remote', 'add', 'upstream', upstreamRemote);
+  });
+
+  afterAll(() => rmSync(base, { recursive: true, force: true }));
+
+  it.effect('returns origin with main and feat/x; HEAD excluded', () =>
+    Effect.gen(function* () {
+      const client = yield* GitClient;
+      const { remotes } = yield* client.listRemotes(local);
+
+      const origin = remotes.find((r) => r.name === 'origin');
+      expect(origin).toBeDefined();
+      const branchNames = origin?.branches.map((b) => b.name) ?? [];
+      expect(branchNames).toContain('main');
+      expect(branchNames).toContain('feat/x');
+      expect(branchNames).not.toContain('HEAD');
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('returns upstream with zero tracking branches (not fetched)', () =>
+    Effect.gen(function* () {
+      const client = yield* GitClient;
+      const { remotes } = yield* client.listRemotes(local);
+
+      const upstream = remotes.find((r) => r.name === 'upstream');
+      expect(upstream).toBeDefined();
+      expect(upstream?.branches).toHaveLength(0);
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('fails with RepoNotFoundError for a bad path', () =>
+    Effect.gen(function* () {
+      const client = yield* GitClient;
+      const error = yield* Effect.flip(client.listRemotes(join(base, 'does-not-exist')));
+      expect(error._tag).toBe('RepoNotFoundError');
     }).pipe(Effect.provide(GitClient.Default)),
   );
 });
