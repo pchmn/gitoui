@@ -10,6 +10,7 @@ import type {
   RepoInput,
   ResolvedRepository,
   ResolveRepositoryInput,
+  StashList,
   Status,
   SwitchBranchInput,
   TagList,
@@ -57,6 +58,8 @@ const git = {
     invoke(CHANNELS.git.listRemotes, input) as Promise<RemoteList>,
   listTags: (input: RepoInput): Promise<TagList> =>
     invoke(CHANNELS.git.listTags, input) as Promise<TagList>,
+  listStashes: (input: RepoInput): Promise<StashList> =>
+    invoke(CHANNELS.git.listStashes, input) as Promise<StashList>,
 };
 
 const desktop = {

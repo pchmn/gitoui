@@ -10,6 +10,7 @@ import {
   parseForEachRef,
   parseOverwriteError,
   parseRemoteTrackingRefs,
+  parseStashList,
 } from './GitClient.ts';
 
 // --- parseForEachRef unit tests (pure, pinned output) ---
@@ -584,4 +585,32 @@ describe('GitClient.listTags', () => {
       expect(error._tag).toBe('RepoNotFoundError');
     }).pipe(Effect.provide(GitClient.Default)),
   );
+});
+
+// --- parseStashList unit tests (pure, pinned output) ---
+
+describe('parseStashList', () => {
+  it('parses "WIP on <branch>: <rest>" (auto-stash)', () => {
+    const result = parseStashList('stash@{0}\0WIP on main: 9c2f1ab fix retry\0abc1234');
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({ id: 'stash@{0}', message: '9c2f1ab fix retry', branch: 'main' });
+  });
+
+  it('parses "On <branch>: <rest>" (named stash)', () => {
+    const result = parseStashList('stash@{0}\0On feature/x: quick save\0abc1234');
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({ id: 'stash@{0}', message: 'quick save', branch: 'feature/x' });
+  });
+
+  it('parses a custom note with no prefix (branch is undefined)', () => {
+    const result = parseStashList('stash@{0}\0custom note, no prefix\0abc1234');
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({ id: 'stash@{0}', message: 'custom note, no prefix' });
+    expect(result[0]?.branch).toBeUndefined();
+  });
+
+  it('returns [] for empty output', () => {
+    expect(parseStashList('')).toEqual([]);
+    expect(parseStashList('   \n  ')).toEqual([]);
+  });
 });

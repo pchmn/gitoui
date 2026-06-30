@@ -24,8 +24,9 @@ export const messages = {
     branchesHeading: 'Branches',
     remotesHeading: 'Remotes',
     tagsHeading: 'Tags',
-    filterPlaceholder: 'Filter branches, tags…',
-    filterAria: 'Filter branches and tags',
+    stashesHeading: 'Stashes',
+    filterPlaceholder: 'Filter branches, tags, stashes…',
+    filterAria: 'Filter branches, tags, and stashes',
   },
   emptyState: {
     // Distinct key from statusBar.idle — coincides today by accident, not by meaning (ADR 0005).
@@ -59,6 +60,12 @@ export const messages = {
     repoNotFound: (path: string) => `Repository not found: ${path}`,
     emptyYet: 'No tags yet.',
     emptyFiltered: 'No tags match filter.',
+  },
+  stashesSection: {
+    failedToLoad: 'Failed to load stashes.',
+    repoNotFound: (path: string) => `Repository not found: ${path}`,
+    emptyYet: 'No stashes yet.',
+    emptyFiltered: 'No stashes match filter.',
   },
   branchSelector: {
     filterPlaceholder: 'Filter branches…',

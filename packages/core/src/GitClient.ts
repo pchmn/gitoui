@@ -4,6 +4,8 @@ import type {
   Remote,
   RemoteList,
   ResolvedRepository,
+  Stash,
+  StashList,
   Status,
   TagList,
 } from '@gitoui/contracts/git';
@@ -109,6 +111,43 @@ export function parseOverwriteError(message: string): string[] | null {
     .split('\n')
     .filter((line) => line.startsWith('\t'))
     .map((line) => line.trim());
+}
+
+/**
+ * Parse the output of `git stash list --format=%gd%x00%gs%x00%H` into a list of stashes.
+ * Each stash entry is NUL-delimited on a single line, lines are LF-separated.
+ *
+ * Subject prefixes:
+ *   `WIP on <branch>: <rest>` — auto-stash message
+ *   `On <branch>: <rest>`    — named stash
+ *   `<anything else>`        — custom note, branch is undefined
+ *
+ * Pure function — no IO — so it can be unit-tested against pinned output without spawning git.
+ */
+export function parseStashList(stdout: string): Stash[] {
+  const stashes: Stash[] = [];
+  for (const line of stdout.split('\n')) {
+    if (!line.trim()) continue;
+    const parts = line.split('\0');
+    const id = parts[0] ?? '';
+    const subject = parts[1] ?? '';
+
+    // Try "WIP on <branch>: <rest>"
+    const wipMatch = subject.match(/^WIP on ([^:]+): (.*)$/);
+    if (wipMatch) {
+      stashes.push({ id, message: wipMatch[2] ?? '', branch: wipMatch[1] ?? undefined });
+      continue;
+    }
+    // Try "On <branch>: <rest>"
+    const onMatch = subject.match(/^On ([^:]+): (.*)$/);
+    if (onMatch) {
+      stashes.push({ id, message: onMatch[2] ?? '', branch: onMatch[1] ?? undefined });
+      continue;
+    }
+    // No prefix — custom note
+    stashes.push({ id, message: subject });
+  }
+  return stashes;
 }
 
 /**
@@ -278,6 +317,18 @@ export class GitClient extends Effect.Service<GitClient>()('@gitoui/core/GitClie
           .filter((line) => line.length > 0)
           .map((name) => ({ name }));
         return { tags } satisfies TagList;
+      }).pipe(Effect.catchTag('GitProcessError', () => new RepoNotFoundError({ path: repoPath }))),
+
+    /**
+     * List all stashes, `stash@{0}` first. Empty stash stack returns `{ stashes: [] }`.
+     * Uses NUL-delimited `--format=%gd%x00%gs%x00%H` for unambiguous parsing. Maps
+     * `GitProcessError` → `RepoNotFoundError`, same as `listTags`.
+     */
+    listStashes: (repoPath: string): Effect.Effect<StashList, RepoNotFoundError> =>
+      withGit(repoPath, async (git) => {
+        const out = await git.raw(['stash', 'list', '--format=%gd%x00%gs%x00%H']);
+        const stashes = parseStashList(out);
+        return { stashes } satisfies StashList;
       }).pipe(Effect.catchTag('GitProcessError', () => new RepoNotFoundError({ path: repoPath }))),
   },
 }) {}
