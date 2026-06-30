@@ -2,6 +2,7 @@ import { cn } from '@gitoui/ui/lib/utils';
 import { GitBranchIcon } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
 import { useActiveRepository } from '#renderer/modules/repository/ActiveRepositoryContext';
+import { messages } from '#renderer/shared/messages/messages';
 
 /**
  * Slim Surface bar pinned to the bottom (DESIGN §5). Reflects the active Repository's live `status`:
@@ -21,9 +22,9 @@ export function StatusBar() {
     <footer className='flex h-6 shrink-0 items-center justify-between border-t border-border bg-card px-3 text-xs text-muted-foreground'>
       <div className='flex min-w-0 items-center gap-3'>
         {root === null ? (
-          <span>No repository open</span>
+          <span>{messages.statusBar.idle}</span>
         ) : status.isError ? (
-          <span>Status unavailable</span>
+          <span>{messages.statusBar.unavailable}</span>
         ) : status.data ? (
           <>
             <span className='flex items-center gap-1 text-foreground'>
@@ -36,10 +37,12 @@ export function StatusBar() {
                 {status.data.behind > 0 && <span>↓{status.data.behind}</span>}
               </span>
             )}
-            <span className='tabular-nums'>{status.data.entries.length} changed</span>
+            <span className='tabular-nums'>
+              {messages.statusBar.changedCount(status.data.entries.length)}
+            </span>
           </>
         ) : (
-          <span>Loading…</span>
+          <span>{messages.statusBar.loading}</span>
         )}
       </div>
 
@@ -56,7 +59,7 @@ function CleanDirtyIndicator({ dirty }: { dirty: boolean }) {
       <span
         className={cn('size-1.5 rounded-full', dirty ? 'bg-primary' : 'bg-muted-foreground/40')}
       />
-      {dirty ? 'Working tree dirty' : 'Clean working tree'}
+      {dirty ? messages.statusBar.dirty : messages.statusBar.clean}
     </span>
   );
 }

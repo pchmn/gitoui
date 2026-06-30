@@ -12,6 +12,7 @@ import { IdentityAvatar } from '@gitoui/ui/identity-avatar';
 import { cn } from '@gitoui/ui/lib/utils';
 import { FolderOpenIcon, XIcon } from '@phosphor-icons/react';
 import { useState } from 'react';
+import { messages } from '#renderer/shared/messages/messages';
 import { useActiveRepository } from '../ActiveRepositoryContext';
 import { useActivateRepository } from '../hooks/useActivateRepository';
 import { useOpenRepository } from '../hooks/useOpenRepository';
@@ -62,7 +63,7 @@ export function RepoSelector() {
         {activeName === null ? (
           <>
             <FolderOpenIcon className='size-3.5' />
-            <span>Open repository</span>
+            <span>{messages.repoSelector.triggerPlaceholder}</span>
           </>
         ) : (
           <>
@@ -73,8 +74,8 @@ export function RepoSelector() {
       </ComboboxTrigger>
 
       <ComboboxContent className='w-72'>
-        <ComboboxInput placeholder='Filter repositories…' />
-        <ComboboxEmpty>No repositories found.</ComboboxEmpty>
+        <ComboboxInput placeholder={messages.repoSelector.filterPlaceholder} />
+        <ComboboxEmpty>{messages.repoSelector.empty}</ComboboxEmpty>
         <ComboboxList>
           {(repo: RecentRepository) => {
             const name = basename(repo.path);
@@ -96,7 +97,7 @@ export function RepoSelector() {
                     (which would re-resolve and re-add the very entry we're dropping). */}
                 <button
                   type='button'
-                  aria-label={`Remove ${name} from recents`}
+                  aria-label={messages.repoSelector.removeFromRecentsAria(name)}
                   tabIndex={-1}
                   className='ml-auto hidden size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground group-data-highlighted:flex hover:bg-muted hover:text-foreground'
                   onPointerDown={(event) => event.stopPropagation()}
@@ -121,7 +122,7 @@ export function RepoSelector() {
             }}
           >
             <FolderOpenIcon className='size-3.5 text-muted-foreground' />
-            Open repository…
+            {messages.repoSelector.openFooterCta}
           </button>
         </div>
       </ComboboxContent>

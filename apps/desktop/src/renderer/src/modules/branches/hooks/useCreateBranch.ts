@@ -1,6 +1,7 @@
 import { toast } from '@gitoui/ui/toast';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { GitError } from '#renderer/shared/git/errors';
+import { messages } from '#renderer/shared/messages/messages';
 import { matchError } from '#renderer/shared/utils/matchError';
 import { useActiveRepository } from '../../repository/ActiveRepositoryContext';
 import { branchesKey } from './useBranches';
@@ -31,12 +32,12 @@ export function useCreateBranch() {
     onError: (error) => {
       toast.add({
         type: 'error',
-        title: 'Could not create branch',
+        title: messages.errors.createBranch.title,
         description: matchError<GitError<'createBranch'>, string>(error, {
-          BranchExistsError: (e) => `A branch named "${e.name}" already exists.`,
-          InvalidBranchNameError: (e) => `"${e.name}" is not a valid branch name.`,
-          RepoNotFoundError: () => 'Repository not found.',
-          _: () => 'An unexpected error occurred.',
+          BranchExistsError: (e) => messages.errors.byTag.branchExists(e.name),
+          InvalidBranchNameError: (e) => messages.errors.byTag.invalidBranchName(e.name),
+          RepoNotFoundError: () => messages.errors.byTag.repoNotFound,
+          _: () => messages.errors.byTag.unexpected,
         }),
       });
     },

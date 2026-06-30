@@ -1,4 +1,5 @@
 import type { GitError } from '#renderer/shared/git/errors';
+import { messages } from '#renderer/shared/messages/messages';
 import { matchError } from '#renderer/shared/utils/matchError';
 import { useActiveRepository } from '../../repository/ActiveRepositoryContext';
 import { useBranches } from '../hooks/useBranches';
@@ -36,8 +37,8 @@ export function BranchesSection({
   // Error state — quiet inline message via matchError.
   if (isError) {
     const message = matchError<GitError<'listBranches'>, string>(error, {
-      RepoNotFoundError: (e) => `Repository not found: ${e.path}`,
-      _: () => 'Failed to load branches.',
+      RepoNotFoundError: (e) => messages.branchesSection.repoNotFound(e.path),
+      _: () => messages.branchesSection.failedToLoad,
     });
     return (
       <p className='px-3 py-2 text-xs text-muted-foreground' role='alert'>
@@ -78,14 +79,16 @@ export function BranchesSection({
           className='mx-2 mb-1 rounded-sm bg-muted px-2 py-1 text-xs text-muted-foreground'
           aria-live='polite'
         >
-          detached @ {head.sha.slice(0, 7)}
+          {messages.branchesSection.detached(head.sha.slice(0, 7))}
         </div>
       )}
 
       {/* Empty state — quiet Muted-Ink hint. */}
       {isEmpty && (
         <p className='px-3 py-1.5 text-xs text-muted-foreground'>
-          {branches.length === 0 ? 'No branches yet.' : 'No branches match filter.'}
+          {branches.length === 0
+            ? messages.branchesSection.emptyYet
+            : messages.branchesSection.emptyFiltered}
         </p>
       )}
 

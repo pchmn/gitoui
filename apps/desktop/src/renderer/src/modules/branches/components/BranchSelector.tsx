@@ -14,6 +14,7 @@ import {
 import { cn } from '@gitoui/ui/lib/utils';
 import { GitBranchIcon, PlusIcon } from '@phosphor-icons/react';
 import { useEffect, useRef, useState } from 'react';
+import { messages } from '#renderer/shared/messages/messages';
 import { useActiveRepository } from '../../repository/ActiveRepositoryContext';
 import { useBranches } from '../hooks/useBranches';
 import { useCreateBranch } from '../hooks/useCreateBranch';
@@ -116,15 +117,15 @@ export function BranchSelector() {
       </ComboboxTrigger>
 
       <ComboboxContent className='w-72'>
-        <ComboboxInput placeholder='Filter branches…' />
-        <ComboboxEmpty>No branches found.</ComboboxEmpty>
+        <ComboboxInput placeholder={messages.branchSelector.filterPlaceholder} />
+        <ComboboxEmpty>{messages.branchSelector.empty}</ComboboxEmpty>
         <ComboboxList>
           {/* The group label is hidden when the filter empties the list so it never sits above
               the "No branches found" message. Items render through `ComboboxCollection` (not a
               raw map) so the search input actually filters them — Base UI filters its own
               `items`. */}
           <ComboboxGroup className='group-data-empty/combobox-content:hidden'>
-            <ComboboxGroupLabel>LOCAL</ComboboxGroupLabel>
+            <ComboboxGroupLabel>{messages.branchSelector.localGroup}</ComboboxGroupLabel>
             <ComboboxCollection>
               {(branch: Branch) => (
                 <ComboboxItem key={branch.name} value={branch} className='gap-2'>
@@ -150,7 +151,7 @@ export function BranchSelector() {
                 ref={inputRef}
                 // Mirror ComboboxInput's visual style so it reads as the same control.
                 className='flex h-8 w-full rounded-sm border border-input bg-transparent px-2 text-xs outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/30'
-                placeholder={`New branch from ${currentBranchName}…`}
+                placeholder={messages.branchSelector.newBranchFrom(currentBranchName)}
                 onKeyDown={handleCreateKeyDown}
               />
             ) : (
@@ -160,7 +161,7 @@ export function BranchSelector() {
                 onClick={handleCreateClick}
               >
                 <PlusIcon className='size-3.5 text-muted-foreground' />
-                New branch from {currentBranchName}…
+                {messages.branchSelector.newBranchFrom(currentBranchName)}
               </button>
             )}
           </div>

@@ -1,5 +1,6 @@
 import { Button } from '@gitoui/ui/button';
 import { FolderOpenIcon, GitBranchIcon } from '@phosphor-icons/react';
+import { messages } from '#renderer/shared/messages/messages';
 import { useOpenRepository } from '../hooks/useOpenRepository';
 
 /** Calm, centered first-run state shown while no Repository is active. */
@@ -12,14 +13,14 @@ export function EmptyState() {
         <GitBranchIcon className='size-6' />
       </div>
       <div className='space-y-1'>
-        <h1 className='text-xl font-semibold tracking-tight text-foreground'>No repository open</h1>
-        <p className='max-w-sm text-sm text-muted-foreground'>
-          Open a local git repository to see its branch, status, and history.
-        </p>
+        <h1 className='text-xl font-semibold tracking-tight text-foreground'>
+          {messages.emptyState.title}
+        </h1>
+        <p className='max-w-sm text-sm text-muted-foreground'>{messages.emptyState.body}</p>
       </div>
       <Button onClick={openRepository} disabled={isOpening}>
         <FolderOpenIcon data-icon='inline-start' />
-        Open repository…
+        {messages.emptyState.openCta}
       </Button>
     </div>
   );
