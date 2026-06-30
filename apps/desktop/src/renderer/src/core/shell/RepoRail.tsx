@@ -1,12 +1,25 @@
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@gitoui/ui/input-group';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@gitoui/ui/input-group';
 import { GitBranchIcon, ListBulletsIcon, MagnifyingGlassIcon } from '@phosphor-icons/react';
+import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { BranchesSection } from '#renderer/modules/branches/components/BranchesSection';
+import { useBranches } from '#renderer/modules/branches/hooks/useBranches';
+import { useActiveRepository } from '#renderer/modules/repository/ActiveRepositoryContext';
 import { messages } from '#renderer/shared/messages/messages';
+import { RailSection } from './RailSection';
 import { ResizeHandle } from './ResizeHandle';
 import { useResizable } from './useResizable';
 
-const BRANCHES_VIEW_MODE_KEY = 'gitoui:branches-view-mode';
+/** localStorage key for the flat/tree view-mode toggle — now rail-global (issue #33). */
+const RAIL_VIEW_MODE_KEY = 'gitoui:rail-view-mode';
+
+/** localStorage key for per-section open/closed state. */
+const SECTION_OPEN_KEY = (id: string) => `gitoui:rail-section-${id}-open`;
 
 /**
  * The persistent left rail (DESIGN.md §5 — Layout / App Shell). Surface background; user-resizable
@@ -16,6 +29,10 @@ const BRANCHES_VIEW_MODE_KEY = 'gitoui:branches-view-mode';
  *
  * A single global filter is pinned to the top and narrows every section beneath it (Branches today;
  * Remotes / Tags / Stashes later) — so its state lives here, above the sections, not inside one.
+ *
+ * Sections collapse/expand independently (not a single-open accordion). Open/closed state persists
+ * per-section in localStorage. The view-mode toggle is a rail-global trailing addon in the filter
+ * bar (issue #33).
  */
 export function RepoRail() {
   const { width, isDragging, handleProps } = useResizable({
@@ -26,26 +43,45 @@ export function RepoRail() {
     side: 'left',
   });
   const [filter, setFilter] = useState('');
+
+  // Rail-global view-mode toggle (was gitoui:branches-view-mode, renamed gitoui:rail-view-mode, issue #33).
   const [viewMode, setViewMode] = useState<'flat' | 'tree'>(() => {
-    const stored = localStorage.getItem(BRANCHES_VIEW_MODE_KEY);
+    const stored = localStorage.getItem(RAIL_VIEW_MODE_KEY);
     return stored === 'flat' ? 'flat' : 'tree';
   });
 
   function toggleViewMode() {
     const next: 'flat' | 'tree' = viewMode === 'tree' ? 'flat' : 'tree';
     setViewMode(next);
-    localStorage.setItem(BRANCHES_VIEW_MODE_KEY, next);
+    localStorage.setItem(RAIL_VIEW_MODE_KEY, next);
+  }
+
+  // Per-section open state with localStorage persistence. Default: Branches open.
+  const [branchesOpen, setBranchesOpen] = useState<boolean>(() => {
+    const stored = localStorage.getItem(SECTION_OPEN_KEY('branches'));
+    return stored === null ? true : stored === 'true';
+  });
+
+  function handleBranchesOpenChange(open: boolean) {
+    setBranchesOpen(open);
+    localStorage.setItem(SECTION_OPEN_KEY('branches'), String(open));
   }
 
   return (
     <aside className='relative flex shrink-0 flex-col bg-card' style={{ width }}>
-      <RailFilter value={filter} onChange={setFilter} />
+      <RailFilter
+        value={filter}
+        onChange={setFilter}
+        viewMode={viewMode}
+        onToggleViewMode={toggleViewMode}
+      />
       <div className='border-b border-border' />
       <div className='min-h-0 flex-1 overflow-y-auto'>
         <BranchesSectionShell
           filter={filter}
           viewMode={viewMode}
-          onToggleViewMode={toggleViewMode}
+          open={branchesOpen}
+          onOpenChange={handleBranchesOpenChange}
         />
       </div>
       <ResizeHandle side='left' isDragging={isDragging} {...handleProps} />
@@ -58,8 +94,20 @@ export function RepoRail() {
  * from the shared flat (`ghost`) `InputGroup` + `InputGroupInput`, so it reads as the same control
  * family as the Branch and Repository selector search fields: a leading magnifying glass over a
  * borderless input, flush against the rail.
+ *
+ * The flat/tree view-mode toggle lives here as a trailing `InputGroupButton` addon (issue #33).
  */
-function RailFilter({ value, onChange }: { value: string; onChange: (next: string) => void }) {
+function RailFilter({
+  value,
+  onChange,
+  viewMode,
+  onToggleViewMode,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  viewMode: 'flat' | 'tree';
+  onToggleViewMode: () => void;
+}) {
   return (
     <InputGroup variant='ghost' className='py-1 px-1'>
       <InputGroupAddon>
@@ -72,42 +120,93 @@ function RailFilter({ value, onChange }: { value: string; onChange: (next: strin
         aria-label={messages.repoRail.filterAria}
         className='text-xs/relaxed'
       />
-    </InputGroup>
-  );
-}
-
-/** Branches section: header + the branch list from modules/branches/, narrowed by `filter`. */
-function BranchesSectionShell({
-  filter,
-  viewMode,
-  onToggleViewMode,
-}: {
-  filter: string;
-  viewMode: 'flat' | 'tree';
-  onToggleViewMode: () => void;
-}) {
-  return (
-    <section>
-      <header className='flex h-8 items-center gap-1.5 px-3 pr-2 text-xs font-medium text-muted-foreground'>
-        <GitBranchIcon className='size-3.5 shrink-0' />
-        <span className='flex-1'>{messages.repoRail.branchesHeading}</span>
+      <InputGroupAddon align='inline-end'>
         {/* Toggle shows the icon for the OPPOSITE view (what clicking will switch to). */}
-        <button
-          type='button'
-          className='flex size-5 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground'
+        <InputGroupButton
           onClick={onToggleViewMode}
           aria-label={viewMode === 'tree' ? 'Switch to flat list view' : 'Switch to tree view'}
           title={viewMode === 'tree' ? 'Switch to flat list view' : 'Switch to tree view'}
         >
           {viewMode === 'tree' ? (
-            <ListBulletsIcon className='size-4' aria-hidden='true' />
+            <ListBulletsIcon className='size-3.5' aria-hidden='true' />
           ) : (
-            <RecursiveTreeIcon className='size-4' aria-hidden='true' />
+            <RecursiveTreeIcon className='size-3.5' aria-hidden='true' />
           )}
-        </button>
-      </header>
-      <BranchesSection filter={filter} viewMode={viewMode} />
-    </section>
+        </InputGroupButton>
+      </InputGroupAddon>
+    </InputGroup>
+  );
+}
+
+/**
+ * Render-prop helper that reads the branches query to provide the count badge and match flag
+ * without duplicating the hook call into every consumer. Shows 0 during loading (badge always
+ * renders per spec — "render even when 0").
+ */
+function BranchesSectionCount({
+  filter,
+  children,
+}: {
+  filter: string;
+  children: (count: number, hasMatch: boolean) => ReactNode;
+}) {
+  const { root } = useActiveRepository();
+  const { data: branchList } = useBranches(root);
+
+  const branches = branchList?.branches ?? [];
+  const count = branches.length;
+  const hasMatch =
+    filter.trim() === '' ||
+    branches.some((b) => b.name.toLowerCase().includes(filter.toLowerCase()));
+
+  return children(count, hasMatch);
+}
+
+/**
+ * Branches section — uses `RailSection` for the collapsible header with count badge. Auto-expands
+ * while a filter is active and there are matches (mirrors BranchTreeView folder auto-expand
+ * behavior). A section with no matches is hidden while a filter is active.
+ */
+function BranchesSectionShell({
+  filter,
+  viewMode,
+  open,
+  onOpenChange,
+}: {
+  filter: string;
+  viewMode: 'flat' | 'tree';
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const isFiltering = filter.trim() !== '';
+  // While a filter is active, auto-expand — overrides persisted collapsed state.
+  const effectiveOpen = isFiltering ? true : open;
+
+  return (
+    <BranchesSectionCount filter={filter}>
+      {(count, hasMatch) => {
+        // While filtering with no match, hide the entire section.
+        if (isFiltering && !hasMatch) return null;
+
+        return (
+          <RailSection
+            id='branches'
+            icon={<GitBranchIcon />}
+            label={messages.repoRail.branchesHeading}
+            count={count}
+            open={effectiveOpen}
+            onOpenChange={(next) => {
+              // Don't persist the auto-expand override; only persist user-driven changes.
+              if (!isFiltering) {
+                onOpenChange(next);
+              }
+            }}
+          >
+            <BranchesSection filter={filter} viewMode={viewMode} />
+          </RailSection>
+        );
+      }}
+    </BranchesSectionCount>
   );
 }
 
@@ -122,27 +221,27 @@ function RecursiveTreeIcon({ className }: { className?: string }) {
       className={className}
     >
       <title>Recursive Tree View</title>
-      <g clip-path='url(#clip0_2005_2)'>
+      <g clipPath='url(#clip0_2005_2)'>
         <path
           d='M88 64H216'
           stroke='currentColor'
-          stroke-width='16'
-          stroke-linecap='round'
-          stroke-linejoin='round'
+          strokeWidth='16'
+          strokeLinecap='round'
+          strokeLinejoin='round'
         />
         <path
           d='M117 128L216 128'
           stroke='currentColor'
-          stroke-width='16'
-          stroke-linecap='round'
-          stroke-linejoin='round'
+          strokeWidth='16'
+          strokeLinecap='round'
+          strokeLinejoin='round'
         />
         <path
           d='M145 192L216 192'
           stroke='currentColor'
-          stroke-width='16'
-          stroke-linecap='round'
-          stroke-linejoin='round'
+          strokeWidth='16'
+          strokeLinecap='round'
+          strokeLinejoin='round'
         />
         <path
           d='M44 76C50.6274 76 56 70.6274 56 64C56 57.3726 50.6274 52 44 52C37.3726 52 32 57.3726 32 64C32 70.6274 37.3726 76 44 76Z'

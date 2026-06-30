@@ -145,11 +145,11 @@ describe('RepoRail branches view-mode toggle', () => {
     await screen.findByText('Branches');
 
     // Nothing persisted yet → default is tree, so the control offers to switch to flat.
-    expect(localStorage.getItem('gitoui:branches-view-mode')).toBeNull();
+    expect(localStorage.getItem('gitoui:rail-view-mode')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /switch to flat list view/i }));
 
     // Now flat: the new mode is written and the control flips to offer tree.
-    expect(localStorage.getItem('gitoui:branches-view-mode')).toBe('flat');
+    expect(localStorage.getItem('gitoui:rail-view-mode')).toBe('flat');
     expect(screen.getByRole('button', { name: /switch to tree view/i })).toBeTruthy();
 
     // A fresh instance reads localStorage on mount and stays in flat mode.

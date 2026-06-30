@@ -12,6 +12,7 @@
     "./globals.css": "./src/styles/globals.css",
     "./lib/*": "./src/lib/*.ts",
     "./hooks/*": "./src/hooks/*.ts",
+    "./collapsible": "./src/components/collapsible.tsx",
     "./button": "./src/components/button.tsx",
     "./combobox": "./src/components/combobox.tsx",
     "./identity-avatar": "./src/components/identity-avatar.tsx",
