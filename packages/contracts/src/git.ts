@@ -134,6 +134,12 @@ export const BranchList = Schema.Struct({
 });
 export type BranchList = typeof BranchList.Type;
 
+export const Tag = Schema.Struct({ name: Schema.String });
+export type Tag = typeof Tag.Type;
+
+export const TagList = Schema.Struct({ tags: Schema.Array(Tag) });
+export type TagList = typeof TagList.Type;
+
 // --- Contracts (window.git.*) ---
 
 export const status = defineMethod({
@@ -199,5 +205,12 @@ export const createBranch = defineMethod({
 export const listRemotes = defineMethod({
   payload: RepoInput,
   success: RemoteList,
+  error: RepoNotFoundError,
+});
+
+/** List all tags, newest version first (`--sort=-v:refname`). No annotated/lightweight distinction. */
+export const listTags = defineMethod({
+  payload: RepoInput,
+  success: TagList,
   error: RepoNotFoundError,
 });

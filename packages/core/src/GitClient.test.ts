@@ -518,3 +518,70 @@ describe('GitClient.listRemotes', () => {
     }).pipe(Effect.provide(GitClient.Default)),
   );
 });
+
+// --- GitClient.listTags integration tests ---
+
+describe('GitClient.listTags', () => {
+  let base: string;
+  let repo: string;
+
+  const g = (cwd: string, ...args: string[]) =>
+    execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+
+  beforeAll(() => {
+    base = realpathSync(mkdtempSync(join(tmpdir(), 'gitoui-tags-')));
+    repo = join(base, 'repo');
+    mkdirSync(repo, { recursive: true });
+    execFileSync('git', ['init', '-q', '-b', 'main', repo], { cwd: base });
+    execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: repo });
+    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: repo });
+    // Initial commit so tagging is possible.
+    writeFileSync(join(repo, 'a.txt'), 'a');
+    g(repo, 'add', 'a.txt');
+    g(repo, 'commit', '-m', 'init');
+    // Create lightweight and annotated tags.
+    g(repo, 'tag', 'v1.0.0');
+    g(repo, 'tag', 'v2.0.0');
+    g(repo, 'tag', '-a', 'v1.1.0', '-m', 'annotated tag');
+  });
+
+  afterAll(() => rmSync(base, { recursive: true, force: true }));
+
+  it.effect('returns all tag names', () =>
+    Effect.gen(function* () {
+      const client = yield* GitClient;
+      const { tags } = yield* client.listTags(repo);
+      const names = tags.map((t) => t.name);
+      expect(names).toContain('v1.0.0');
+      expect(names).toContain('v1.1.0');
+      expect(names).toContain('v2.0.0');
+      expect(tags).toHaveLength(3);
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('returns an empty tag list when the repo has no tags', () =>
+    Effect.gen(function* () {
+      // Create a fresh repo with no tags.
+      const emptyRepo = join(base, 'empty');
+      mkdirSync(emptyRepo, { recursive: true });
+      execFileSync('git', ['init', '-q', '-b', 'main', emptyRepo], { cwd: base });
+      execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: emptyRepo });
+      execFileSync('git', ['config', 'user.name', 'Test'], { cwd: emptyRepo });
+      writeFileSync(join(emptyRepo, 'x.txt'), 'x');
+      execFileSync('git', ['add', 'x.txt'], { cwd: emptyRepo });
+      execFileSync('git', ['commit', '-m', 'init'], { cwd: emptyRepo });
+
+      const client = yield* GitClient;
+      const { tags } = yield* client.listTags(emptyRepo);
+      expect(tags).toHaveLength(0);
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('fails with RepoNotFoundError for a bad path', () =>
+    Effect.gen(function* () {
+      const client = yield* GitClient;
+      const error = yield* Effect.flip(client.listTags(join(base, 'does-not-exist')));
+      expect(error._tag).toBe('RepoNotFoundError');
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+});

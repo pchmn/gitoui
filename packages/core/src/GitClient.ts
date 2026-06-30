@@ -5,6 +5,7 @@ import type {
   RemoteList,
   ResolvedRepository,
   Status,
+  TagList,
 } from '@gitoui/contracts/git';
 import {
   BranchExistsError,
@@ -255,6 +256,28 @@ export class GitClient extends Effect.Service<GitClient>()('@gitoui/core/GitClie
         }));
 
         return { remotes } satisfies RemoteList;
+      }).pipe(Effect.catchTag('GitProcessError', () => new RepoNotFoundError({ path: repoPath }))),
+
+    /**
+     * List all tags, newest version first (`--sort=-v:refname`). No annotated/lightweight
+     * distinction — returns tag names only. Maps `GitProcessError` → `RepoNotFoundError`, same as
+     * `listBranches` and `listRemotes`. Prefer `for-each-ref` over simple-git's `tags()` for
+     * consistent sorting and format control (matches the `listBranches` approach).
+     */
+    listTags: (repoPath: string): Effect.Effect<TagList, RepoNotFoundError> =>
+      withGit(repoPath, async (git) => {
+        const out = await git.raw([
+          'for-each-ref',
+          '--sort=-v:refname',
+          '--format=%(refname:lstrip=2)',
+          'refs/tags',
+        ]);
+        const tags = out
+          .split('\n')
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0)
+          .map((name) => ({ name }));
+        return { tags } satisfies TagList;
       }).pipe(Effect.catchTag('GitProcessError', () => new RepoNotFoundError({ path: repoPath }))),
   },
 }) {}

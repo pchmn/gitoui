@@ -12,6 +12,7 @@ import type {
   ResolveRepositoryInput,
   Status,
   SwitchBranchInput,
+  TagList,
 } from '@gitoui/contracts/git';
 import { contextBridge, ipcRenderer } from 'electron';
 import { CHANNELS } from '#ipc/channels';
@@ -54,6 +55,8 @@ const git = {
     invoke(CHANNELS.git.createBranch, input) as Promise<void>,
   listRemotes: (input: RepoInput): Promise<RemoteList> =>
     invoke(CHANNELS.git.listRemotes, input) as Promise<RemoteList>,
+  listTags: (input: RepoInput): Promise<TagList> =>
+    invoke(CHANNELS.git.listTags, input) as Promise<TagList>,
 };
 
 const desktop = {
