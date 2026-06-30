@@ -9,6 +9,7 @@ import {
   HardDrivesIcon,
   ListBulletsIcon,
   MagnifyingGlassIcon,
+  StackIcon,
   TagIcon,
 } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
@@ -18,6 +19,8 @@ import { useBranches } from '#renderer/modules/branches/hooks/useBranches';
 import { RemotesSection } from '#renderer/modules/remotes/components/RemotesSection';
 import { useRemotes } from '#renderer/modules/remotes/hooks/useRemotes';
 import { useActiveRepository } from '#renderer/modules/repository/ActiveRepositoryContext';
+import { StashesSection } from '#renderer/modules/stashes/components/StashesSection';
+import { useStashes } from '#renderer/modules/stashes/hooks/useStashes';
 import { TagsSection } from '#renderer/modules/tags/components/TagsSection';
 import { useTags } from '#renderer/modules/tags/hooks/useTags';
 import { messages } from '#renderer/shared/messages/messages';
@@ -99,6 +102,17 @@ export function RepoRail() {
     localStorage.setItem(SECTION_OPEN_KEY('tags'), String(open));
   }
 
+  // Per-section open state for Stashes. Default: open.
+  const [stashesOpen, setStashesOpen] = useState<boolean>(() => {
+    const stored = localStorage.getItem(SECTION_OPEN_KEY('stashes'));
+    return stored === null ? true : stored === 'true';
+  });
+
+  function handleStashesOpenChange(open: boolean) {
+    setStashesOpen(open);
+    localStorage.setItem(SECTION_OPEN_KEY('stashes'), String(open));
+  }
+
   return (
     <aside className='relative flex shrink-0 flex-col bg-card' style={{ width }}>
       <RailFilter
@@ -122,6 +136,11 @@ export function RepoRail() {
           onOpenChange={handleRemotesOpenChange}
         />
         <TagsSectionShell filter={filter} open={tagsOpen} onOpenChange={handleTagsOpenChange} />
+        <StashesSectionShell
+          filter={filter}
+          open={stashesOpen}
+          onOpenChange={handleStashesOpenChange}
+        />
       </div>
       <ResizeHandle side='left' isDragging={isDragging} {...handleProps} />
     </aside>
@@ -385,6 +404,77 @@ function TagsSectionShell({
         );
       }}
     </TagsSectionCount>
+  );
+}
+
+/**
+ * Render-prop helper that reads the stashes query to provide the count badge and match flag
+ * without duplicating the hook call into every consumer.
+ */
+function StashesSectionCount({
+  filter,
+  children,
+}: {
+  filter: string;
+  children: (count: number, hasMatch: boolean) => ReactNode;
+}) {
+  const { root } = useActiveRepository();
+  const { data: stashList } = useStashes(root);
+
+  const stashes = stashList?.stashes ?? [];
+  const count = stashes.length;
+  const lowerFilter = filter.toLowerCase().trim();
+  const hasMatch =
+    lowerFilter === '' ||
+    stashes.some(
+      (s) =>
+        s.message.toLowerCase().includes(lowerFilter) ||
+        s.branch?.toLowerCase().includes(lowerFilter),
+    );
+
+  return children(count, hasMatch);
+}
+
+/**
+ * Stashes section — uses `RailSection` for the collapsible header with count badge. Always flat —
+ * ignores the rail-global flat/tree mode. Auto-expands while a filter is active and there are
+ * matches. A section with no matches is hidden while a filter is active.
+ */
+function StashesSectionShell({
+  filter,
+  open,
+  onOpenChange,
+}: {
+  filter: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const isFiltering = filter.trim() !== '';
+  const effectiveOpen = isFiltering ? true : open;
+
+  return (
+    <StashesSectionCount filter={filter}>
+      {(count, hasMatch) => {
+        if (isFiltering && !hasMatch) return null;
+
+        return (
+          <RailSection
+            id='stashes'
+            icon={<StackIcon weight='duotone' />}
+            label={messages.repoRail.stashesHeading}
+            count={count}
+            open={effectiveOpen}
+            onOpenChange={(next) => {
+              if (!isFiltering) {
+                onOpenChange(next);
+              }
+            }}
+          >
+            <StashesSection filter={filter} />
+          </RailSection>
+        );
+      }}
+    </StashesSectionCount>
   );
 }
 

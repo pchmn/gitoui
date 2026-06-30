@@ -140,6 +140,16 @@ export type Tag = typeof Tag.Type;
 export const TagList = Schema.Struct({ tags: Schema.Array(Tag) });
 export type TagList = typeof TagList.Type;
 
+export const Stash = Schema.Struct({
+  id: Schema.String, // 'stash@{0}'
+  message: Schema.String,
+  branch: Schema.optional(Schema.String), // originating branch, if parseable
+});
+export type Stash = typeof Stash.Type;
+
+export const StashList = Schema.Struct({ stashes: Schema.Array(Stash) });
+export type StashList = typeof StashList.Type;
+
 // --- Contracts (window.git.*) ---
 
 export const status = defineMethod({
@@ -212,5 +222,12 @@ export const listRemotes = defineMethod({
 export const listTags = defineMethod({
   payload: RepoInput,
   success: TagList,
+  error: RepoNotFoundError,
+});
+
+/** List all stashes, `stash@{0}` first. Empty stack returns `{ stashes: [] }`. */
+export const listStashes = defineMethod({
+  payload: RepoInput,
+  success: StashList,
   error: RepoNotFoundError,
 });
