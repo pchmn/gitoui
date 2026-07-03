@@ -50,10 +50,17 @@ export function useCommits(repoPath: string | null): {
   isFetchingNextPage: boolean;
   /** Request the next page at the current cursor. No-op while fetching or once history is exhausted. */
   fetchNextPage: () => void;
+  /**
+   * Bumps every time a fresh page 1 replaces the loaded window (mount, repo switch, branch-switch
+   * invalidation) — the signal that a retained scroll offset now points into rows that may no
+   * longer exist. Load-more appends never bump it.
+   */
+  resetToken: number;
 } {
   const queryClient = useQueryClient();
   const [hasNextPage, setHasNextPage] = useState(true);
   const [isFetchingNextPage, setIsFetchingNextPage] = useState(false);
+  const [resetToken, setResetToken] = useState(0);
 
   // A repo switch resets the window optimistically (before the new page-1 fetch resolves) so the
   // previous repo's `hasNextPage`/`isFetchingNextPage` never leaks into the new one, even briefly.
@@ -81,6 +88,7 @@ export function useCommits(repoPath: string | null): {
           cursor.skip = rows.length;
           setHasNextPage(rows.length === PAGE_LIMIT);
           setIsFetchingNextPage(false);
+          setResetToken((token) => token + 1);
           return rows;
         },
         getKey: (commit) => commit.sha,
@@ -142,5 +150,6 @@ export function useCommits(repoPath: string | null): {
     hasNextPage: page === null ? false : hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
+    resetToken,
   };
 }

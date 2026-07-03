@@ -34,6 +34,7 @@ export function CommitGraph({ root }: { root: string }) {
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
+    resetToken,
   } = useCommits(root);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -48,6 +49,17 @@ export function CommitGraph({ root }: { root: string }) {
     overscan: 10,
   });
   const virtualItems = virtualizer.getVirtualItems();
+
+  // A page-1 reset (repo/branch switch) replaces the loaded window — the retained scroll offset
+  // would point into rows of the *previous* history, so snap back to the top of the new one.
+  // `scrollToOffset` (not a bare `scrollTop` write) so the virtualizer's internal offset updates
+  // in the same tick. Initial mount bumps the token too; scrolling to 0 there is a no-op.
+  const lastResetToken = useRef(resetToken);
+  useEffect(() => {
+    if (lastResetToken.current === resetToken) return;
+    lastResetToken.current = resetToken;
+    virtualizer.scrollToOffset(0);
+  }, [resetToken, virtualizer]);
 
   // Trigger the next page once the viewport nears the end of the loaded set.
   useEffect(() => {

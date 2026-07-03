@@ -277,6 +277,38 @@ describe('CommitGraph freshness', () => {
     // page comes back short.
     expect(screen.queryByText(/end of history/i)).toBeNull();
   });
+
+  // A page-1 reset replaces the loaded window, so a scroll offset deep into the previous history
+  // must not survive it — the graph snaps back to the top of the new HEAD's history.
+  it('snaps the scroll offset back to the top when the commits query is invalidated', async () => {
+    let head: Commit[] = makeCommitPage(PAGE_LIMIT, 0);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    vi.stubGlobal('git', {
+      listCommits: vi.fn(({ skip }: ListCommitsArgs) =>
+        Promise.resolve((skip ?? 0) === 0 ? head : []),
+      ),
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <CommitGraph root='/repo' />
+      </QueryClientProvider>,
+    );
+    await screen.findByText('commit #0');
+
+    // Deep into the loaded window (but shy of the load-more threshold).
+    await scrollTo(100 * 32);
+    const scroller = screen.getByRole('list', { name: 'Commits' }).parentElement;
+    expect(scroller?.scrollTop).toBe(100 * 32);
+
+    head = makeCommitPage(5, 10_000); // the new branch's (much shorter) history.
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: commitsKey('/repo') });
+    });
+
+    await screen.findByText('commit #10000');
+    expect(scroller?.scrollTop).toBe(0);
+  });
 });
 
 describe('CommitGraph virtualization', () => {
