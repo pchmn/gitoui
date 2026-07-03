@@ -7,6 +7,7 @@ description: >
   workflows. Use this skill whenever the user wants to create a PR, update a PR, modify a PR
   description, open a pull request, push changes, submit for review, or says things like
   "create a PR", "open a PR", "update the PR", "push and create PR", "submit PR", or "/write-pr".
+allowed-tools: Bash(gh pr *), Bash(git add *), Bash(git commit *), Bash(git push *)
 ---
 
 # PR Skill

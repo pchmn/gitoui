@@ -1,6 +1,6 @@
+import { CommitGraph } from '#renderer/modules/commits/components/CommitGraph';
 import { useActiveRepository } from '#renderer/modules/repository/ActiveRepositoryContext';
 import { EmptyState } from '#renderer/modules/repository/components/EmptyState';
-import { RepositoryView } from '#renderer/modules/repository/components/RepositoryView';
 import { useReopenLastRepository } from '#renderer/modules/repository/hooks/useReopenLastRepository';
 import { RepoRail } from './RepoRail';
 import { SelectionProvider } from './SelectionContext';
@@ -28,7 +28,7 @@ export function AppShell() {
         <div className='flex min-h-0 flex-1'>
           {root !== null && <RepoRail />}
           <main className='min-h-0 flex-1 overflow-auto'>
-            {root !== null ? <RepositoryView root={root} /> : isRestoring ? null : <EmptyState />}
+            {root !== null ? <CommitGraph root={root} /> : isRestoring ? null : <EmptyState />}
           </main>
           {/* right inspector column slots here in a future slice */}
         </div>

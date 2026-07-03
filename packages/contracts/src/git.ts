@@ -150,6 +150,41 @@ export type Stash = typeof Stash.Type;
 export const StashList = Schema.Struct({ stashes: Schema.Array(Stash) });
 export type StashList = typeof StashList.Type;
 
+/** Any named pointer attached to a Commit. ALWAYS `[]` in this slice — populated by the ref-pills slice. */
+export const Ref = Schema.Union(
+  Schema.TaggedStruct('Branch', { name: Schema.String, current: Schema.Boolean }),
+  Schema.TaggedStruct('RemoteBranch', { name: Schema.String }),
+  Schema.TaggedStruct('Tag', { name: Schema.String }),
+  Schema.TaggedStruct('Head', {}),
+);
+export type Ref = typeof Ref.Type;
+
+/** A recorded snapshot in history (see CONTEXT.md — "Commit", not "revision"/"changeset"). */
+export const Commit = Schema.Struct({
+  sha: Schema.String,
+  /** Parent SHAs. `[]` for a root commit; `length >= 2` signals a merge commit. */
+  parents: Schema.Array(Schema.String),
+  author: Schema.Struct({ name: Schema.String, email: Schema.String }),
+  committer: Schema.Struct({ name: Schema.String, email: Schema.String }),
+  /** Epoch MS. */
+  authoredAt: Schema.Number,
+  /** Epoch MS. */
+  committedAt: Schema.Number,
+  subject: Schema.String,
+  body: Schema.String,
+  /** ALWAYS `[]` in this slice — populated in the ref-pills slice. */
+  refs: Schema.Array(Ref),
+});
+export type Commit = typeof Commit.Type;
+
+/** Input for `listCommits`. `RepoInput` has no `skip`/`limit` fields, so a new struct. */
+export const ListCommitsInput = Schema.Struct({
+  repoPath: Schema.String,
+  skip: Schema.optional(Schema.Number),
+  limit: Schema.optional(Schema.Number),
+});
+export type ListCommitsInput = typeof ListCommitsInput.Type;
+
 // --- Contracts (window.git.*) ---
 
 export const status = defineMethod({
@@ -229,5 +264,17 @@ export const listTags = defineMethod({
 export const listStashes = defineMethod({
   payload: RepoInput,
   success: StashList,
+  error: RepoNotFoundError,
+});
+
+/**
+ * Walk the current Branch's history (HEAD), newest first, honoring `skip`/`limit` (default
+ * `skip: 0`, `limit: 300`). An empty Repository (unborn HEAD) returns `[]`, not an error. `refs`
+ * is always `[]` in this slice (populated in the ref-pills slice). Named `listCommits`, never
+ * `getLog` — "log" is git plumbing kept out of the domain (see CONTEXT.md).
+ */
+export const listCommits = defineMethod({
+  payload: ListCommitsInput,
+  success: Schema.Array(Commit),
   error: RepoNotFoundError,
 });
