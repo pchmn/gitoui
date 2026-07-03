@@ -5,9 +5,18 @@
 import type { Commit } from '@gitoui/contracts/git';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { commitsKey } from '../hooks/useCommits';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { commitsKey, PAGE_LIMIT } from '../hooks/useCommits';
 import { CommitGraph } from './CommitGraph';
+
+// TanStack Virtual reads the scroll container's `offsetHeight`/`offsetWidth` to size its viewport
+// (`@tanstack/virtual-core`'s `getRect`). happy-dom has no real layout engine, so both are 0 by
+// default and every row would fall outside the "visible" range. A fixed viewport is enough — rows
+// are a fixed height (`estimateSize`), no dynamic per-row measurement is in play.
+beforeAll(() => {
+  Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, value: 600 });
+  Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, value: 600 });
+});
 
 afterEach(() => {
   cleanup();
@@ -31,12 +40,26 @@ function makeCommit(partial: Partial<Commit> = {}): Commit {
   };
 }
 
+/** A run of `count` commits, newest (`committedAt`) first, with `sha`/`subject` derived from `startAt`. */
+function makeCommitPage(count: number, startAt: number): Commit[] {
+  return Array.from({ length: count }, (_, i) => {
+    const n = startAt + i;
+    return makeCommit({
+      sha: `sha-${n}`,
+      subject: `commit #${n}`,
+      committedAt: 1_000_000 - n, // descending — commit #0 is newest.
+    });
+  });
+}
+
+type ListCommitsArgs = { repoPath: string; skip?: number; limit?: number };
+
 function Wrapper({
   root = '/repo',
   listCommitsMock,
 }: {
   root?: string;
-  listCommitsMock: () => Promise<readonly Commit[]>;
+  listCommitsMock: (args: ListCommitsArgs) => Promise<readonly Commit[]>;
 }) {
   vi.stubGlobal('git', { listCommits: vi.fn(listCommitsMock) });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -45,6 +68,17 @@ function Wrapper({
       <CommitGraph root={root} />
     </QueryClientProvider>
   );
+}
+
+/** Scroll the virtualized scroller to `top` and flush the resulting scroll event. */
+async function scrollTo(top: number) {
+  const list = await screen.findByRole('list', { name: 'Commits' });
+  const scroller = list.parentElement;
+  if (!scroller) throw new Error('CommitGraph scroll container not found');
+  await act(async () => {
+    scroller.scrollTop = top;
+    scroller.dispatchEvent(new Event('scroll'));
+  });
 }
 
 describe('CommitGraph rows', () => {
@@ -59,10 +93,10 @@ describe('CommitGraph rows', () => {
     expect(screen.getByText('fix: leak')).toBeTruthy();
     expect(screen.getByText('Ada Lovelace')).toBeTruthy();
     expect(screen.getByText('Bob')).toBeTruthy();
-    // Two circular author avatars, one per commit.
-    const items = screen.getAllByRole('listitem');
-    expect(items).toHaveLength(2);
     expect(screen.getAllByText('2h')).toHaveLength(2);
+    // A short first page (2 < PAGE_LIMIT) is the whole history — the quiet terminus row joins the
+    // two commit rows.
+    await screen.findByText(/end of history/i);
   });
 });
 
@@ -128,10 +162,14 @@ describe('CommitGraph ordering', () => {
     render(<Wrapper listCommitsMock={() => Promise.resolve(commits)} />);
 
     await screen.findByText('the newest one');
-    const rendered = screen.getAllByRole('listitem').map((li) => li.textContent ?? '');
-    expect(rendered[0]).toContain('the newest one');
-    expect(rendered[1]).toContain('the middle one');
-    expect(rendered[2]).toContain('the oldest one');
+    // Only assert the relative order of the commit rows — a terminus row also renders (3 < PAGE_LIMIT).
+    const rows = screen
+      .getAllByRole('listitem')
+      .map((li) => li.textContent ?? '')
+      .filter((text) => text.includes('the '));
+    expect(rows[0]).toContain('the newest one');
+    expect(rows[1]).toContain('the middle one');
+    expect(rows[2]).toContain('the oldest one');
   });
 });
 
@@ -208,5 +246,91 @@ describe('CommitGraph freshness', () => {
 
     await screen.findByText('on the new branch');
     expect(screen.queryByText('on the old branch')).toBeNull();
+  });
+
+  // A page-1 refetch (branch switch) resets the loaded window, so a Repository that was previously
+  // fully loaded (terminus shown) but whose new HEAD has a full page must go back to "may have more".
+  it('resets hasNextPage on invalidation, re-arming the load-more path for the new HEAD', async () => {
+    let head: Commit[] = [makeCommit({ sha: 'short-branch', subject: 'short branch tip' })];
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const listCommitsMock = vi.fn(({ skip }: ListCommitsArgs) => {
+      if ((skip ?? 0) === 0) return Promise.resolve(head);
+      return Promise.resolve(makeCommitPage(10, 1_000)); // the second page of the new (full) HEAD.
+    });
+    vi.stubGlobal('git', { listCommits: listCommitsMock });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <CommitGraph root='/repo' />
+      </QueryClientProvider>,
+    );
+    await screen.findByText('short branch tip');
+    await screen.findByText(/end of history/i);
+
+    head = makeCommitPage(PAGE_LIMIT, 0); // switching to a HEAD with a full first page.
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: commitsKey('/repo') });
+    });
+
+    await screen.findByText('commit #0');
+    // The full first page means "maybe more" again — the terminus should be gone until the next
+    // page comes back short.
+    expect(screen.queryByText(/end of history/i)).toBeNull();
+  });
+});
+
+describe('CommitGraph virtualization', () => {
+  it('only mounts the visible rows for a large history, not every commit', async () => {
+    const commits = makeCommitPage(PAGE_LIMIT, 0);
+    render(<Wrapper listCommitsMock={() => Promise.resolve(commits)} />);
+
+    await screen.findByText('commit #0');
+    // 600px viewport / 32px rows ≈ 19 visible + overscan on both sides — nowhere near all 300.
+    const rows = screen.getAllByRole('listitem');
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.length).toBeLessThan(commits.length);
+  });
+});
+
+describe('CommitGraph pagination', () => {
+  it('requests the first page with skip 0 and the default limit', async () => {
+    const listCommitsMock = vi.fn(() => Promise.resolve([makeCommit()]));
+    render(<Wrapper listCommitsMock={listCommitsMock} />);
+
+    await screen.findByText('feat: add engine');
+    expect(listCommitsMock).toHaveBeenCalledWith({ repoPath: '/repo', skip: 0, limit: PAGE_LIMIT });
+  });
+
+  it('loads the next page (skip = loaded count) when scrolling nears the end, appends + dedups by sha, and halts once a short page arrives', async () => {
+    const page1 = makeCommitPage(PAGE_LIMIT, 0); // full page — "there may be more".
+    // Page 2 re-sends the last row of page 1 (`sha-299`) to prove dedup, then adds new rows, and is
+    // itself short — the real end of history.
+    const page2 = [page1[page1.length - 1] as Commit, ...makeCommitPage(20, 300)];
+    const listCommitsMock = vi.fn(({ skip }: ListCommitsArgs) =>
+      Promise.resolve((skip ?? 0) === 0 ? page1 : page2),
+    );
+    render(<Wrapper listCommitsMock={listCommitsMock} />);
+    await screen.findByText('commit #0');
+
+    // Near (not at) the loaded end of page 1 — within `LOAD_MORE_THRESHOLD` rows of row 299.
+    await scrollTo((PAGE_LIMIT - 10) * 32);
+
+    expect(await screen.findByText('commit #300')).toBeTruthy();
+    expect(listCommitsMock).toHaveBeenCalledWith({
+      repoPath: '/repo',
+      skip: PAGE_LIMIT,
+      limit: PAGE_LIMIT,
+    });
+    // `sha-299` was re-sent by page 2 — dedup by sha means it renders once, not twice.
+    expect(screen.getAllByText('commit #299')).toHaveLength(1);
+
+    // Scroll to the real end (320 total rows) to reveal the terminus row.
+    await scrollTo(320 * 32);
+    await screen.findByText(/end of history/i);
+
+    listCommitsMock.mockClear();
+    await scrollTo(320 * 32);
+    // The end of history: no further requests once a page came back shorter than the limit.
+    expect(listCommitsMock).not.toHaveBeenCalled();
   });
 });

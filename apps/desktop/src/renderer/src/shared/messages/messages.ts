@@ -71,6 +71,8 @@ export const messages = {
     failedToLoad: 'Failed to load commits.',
     repoNotFound: (path: string) => `Repository not found: ${path}`,
     emptyYet: 'No commits yet.',
+    loadingMore: 'Loading more commits…',
+    endOfHistory: 'End of history',
   },
   branchSelector: {
     filterPlaceholder: 'Filter branches…',

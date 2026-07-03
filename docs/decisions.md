@@ -154,7 +154,7 @@ A very well-architected Electron app, studied as a reference. **Different scope*
 |---|---|
 | `packages/contracts` | `effect` (`Schema` only — schema-only, no runtime) |
 | `packages/core` | `effect` (+ `@effect/platform` later if needed), `simple-git`, depends on `@gitoui/contracts` |
-| `apps/desktop` (renderer) | `@tanstack/react-router`, `@tanstack/react-query`, `@tanstack/react-db`, `react`, Tailwind, depends on `@gitoui/contracts` + `@gitoui/ui` |
+| `apps/desktop` (renderer) | `@tanstack/react-router`, `@tanstack/react-query`, `@tanstack/react-db`, `@tanstack/react-virtual` (Commit graph virtualization, issue #44), `react`, Tailwind, depends on `@gitoui/contracts` + `@gitoui/ui` |
 | `apps/desktop` (main/preload) | `electron`, home-made IPC registry (`makeIpcMethod`/`makeIpcSubscription`), depends on `@gitoui/core` + `@gitoui/contracts` |
 | `packages/ui` | React design system (Base UI, cva/cn, Tailwind) |
 
