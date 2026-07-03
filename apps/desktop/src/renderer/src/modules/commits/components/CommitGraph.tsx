@@ -1,14 +1,16 @@
+import type { Ref } from '@gitoui/contracts/git';
 import { IdentityAvatar } from '@gitoui/ui/identity-avatar';
+import { RefPill } from '@gitoui/ui/ref-pill';
 import { messages } from '#renderer/shared/messages/messages';
 import { formatRelativeTime } from '#renderer/shared/utils/relativeTime';
 import { useCommits } from '../hooks/useCommits';
 
 /**
- * The Commit graph's walking skeleton (issue #42): a flat, non-virtualized list of the current
- * Branch's history (HEAD), one dense row per Commit. Columns per DESIGN.md `GRAPH · REFS` /
- * `COMMIT` / `AUTHOR` — in this slice GRAPH · REFS is empty (no lanes, no ref pills yet), COMMIT
- * shows the subject, AUTHOR shows the author's circular avatar + name + a relative date. No row
- * selection — that lands with the lanes/ref-pills slices.
+ * The Commit graph: a flat, non-virtualized list of the current Branch's history (HEAD), one
+ * dense row per Commit. Columns per DESIGN.md `GRAPH · REFS` / `COMMIT` / `AUTHOR` — GRAPH · REFS
+ * carries the Refs sitting on each Commit as pills (issue #43; lanes come in a later slice),
+ * COMMIT shows the subject, AUTHOR shows the author's circular avatar + name + a relative date.
+ * No row selection — that lands with the lanes slice.
  *
  * Mirrors `BranchesSection`'s loading/error/empty states: skeleton rows on pending, a quiet
  * `role="alert"` inline message via `matchError` on error, an empty hint when the Repository has
@@ -46,8 +48,22 @@ export function CommitGraph({ root }: { root: string }) {
           key={commit.sha}
           className='flex h-8 items-center gap-3 border-b border-border/50 px-3 text-xs'
         >
-          {/* GRAPH · REFS column — empty in this slice (no lanes, no ref pills yet). */}
-          <span className='w-4 shrink-0' aria-hidden='true' />
+          {/* GRAPH · REFS column — ref pills on decorated Commits (lanes come in a later slice). */}
+          {commit.refs.length === 0 ? (
+            <span className='w-4 shrink-0' aria-hidden='true' />
+          ) : (
+            <span className='flex shrink-0 items-center gap-1'>
+              {commit.refs.map((ref) => (
+                <RefPill
+                  key={`${ref._tag}:${refLabel(ref)}`}
+                  emphasis={refEmphasis(ref)}
+                  title={refLabel(ref)}
+                >
+                  {refLabel(ref)}
+                </RefPill>
+              ))}
+            </span>
+          )}
           <span className='min-w-0 flex-1 truncate' title={commit.subject}>
             {commit.subject}
           </span>
@@ -60,6 +76,27 @@ export function CommitGraph({ root }: { root: string }) {
       ))}
     </ul>
   );
+}
+
+/** Pill text for a Ref. `Head` is the Detached-HEAD marker; every other variant carries its name. */
+function refLabel(ref: Ref): string {
+  return ref._tag === 'Head' ? 'HEAD' : ref.name;
+}
+
+/**
+ * DESIGN §Ref pills: the current Branch and Detached HEAD take the stronger tint; remote-tracking
+ * Branches and Tags read quieter; other local Branches sit on the default Accent Surface.
+ */
+function refEmphasis(ref: Ref): 'strong' | 'default' | 'quiet' {
+  switch (ref._tag) {
+    case 'Branch':
+      return ref.current ? 'strong' : 'default';
+    case 'Head':
+      return 'strong';
+    case 'RemoteBranch':
+    case 'Tag':
+      return 'quiet';
+  }
 }
 
 /** Skeleton rows shown during loading (no spinner — skeletons over spinners per the rail convention). */

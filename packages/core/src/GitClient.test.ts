@@ -10,6 +10,7 @@ import {
   parseCommitLog,
   parseForEachRef,
   parseOverwriteError,
+  parseRefDecoration,
   parseRemoteTrackingRefs,
   parseStashList,
 } from './GitClient.ts';
@@ -616,23 +617,61 @@ describe('parseStashList', () => {
   });
 });
 
+// --- parseRefDecoration unit tests (pure, pinned output) ---
+
+describe('parseRefDecoration', () => {
+  // Pinned cases from the issue spec — `%D` output under `--decorate=full` (full ref paths).
+
+  it('parses a full decoration: current Branch + remote-tracking Branch + Tag', () => {
+    const refs = parseRefDecoration(
+      'HEAD -> refs/heads/main, refs/remotes/origin/main, tag: refs/tags/v2.3.0',
+    );
+    expect(refs).toEqual([
+      { _tag: 'Branch', name: 'main', current: true },
+      { _tag: 'RemoteBranch', name: 'origin/main' },
+      { _tag: 'Tag', name: 'v2.3.0' },
+    ]);
+  });
+
+  it('classifies a slash-bearing local Branch as Branch, not RemoteBranch', () => {
+    expect(parseRefDecoration('refs/heads/feature/pay-fallback')).toEqual([
+      { _tag: 'Branch', name: 'feature/pay-fallback', current: false },
+    ]);
+  });
+
+  it('parses a bare HEAD (Detached HEAD) as Head', () => {
+    expect(parseRefDecoration('HEAD')).toEqual([{ _tag: 'Head' }]);
+  });
+
+  it('returns [] for an empty decoration', () => {
+    expect(parseRefDecoration('')).toEqual([]);
+  });
+
+  it('skips refs the graph does not draw (e.g. refs/stash)', () => {
+    expect(parseRefDecoration('refs/stash, refs/heads/main')).toEqual([
+      { _tag: 'Branch', name: 'main', current: false },
+    ]);
+  });
+});
+
 // --- parseCommitLog unit tests (pure, pinned output) ---
 
 describe('parseCommitLog', () => {
-  // Pinned output captured from a real `git log --format=%H%x1f%P%x1f%an%x1f%ae%x1f%cn%x1f%ce%x1f%at%x1f%ct%x1f%s%x1f%b%x1e`:
-  // two commits, newest first — "second" (a plain commit, root parent) and "first" (the root
-  // commit, %P empty, multi-line %b). Each record is RS (\x1e)-terminated and git appends its own
-  // trailing '\n' after each terminator, which becomes a leading '\n' on every record but the first.
+  // Pinned output captured from a real `git log --decorate=full --format=%H%x1f%P%x1f%an%x1f%ae%x1f%cn%x1f%ce%x1f%at%x1f%ct%x1f%s%x1f%b%x1f%D%x1e`:
+  // two commits, newest first — "second" (a plain commit, root parent, decorated as the tip of the
+  // checked-out `main`) and "first" (the root commit, %P empty, multi-line %b, no decoration).
+  // Each record is RS (\x1e)-terminated and git appends its own trailing '\n' after each
+  // terminator, which becomes a leading '\n' on every record but the first.
   const TWO_COMMITS =
-    'f4af4ba733604e395f19ffc8fca5dc1724ea8af7\x1ff6d02d5f547be62a327e6d129d0c010f167329e9\x1fT\x1ft@t.com\x1fT\x1ft@t.com\x1f1782846820\x1f1782846820\x1fsecond\x1f\x1e\n' +
-    'f6d02d5f547be62a327e6d129d0c010f167329e9\x1f\x1fT\x1ft@t.com\x1fT\x1ft@t.com\x1f1782846820\x1f1782846820\x1ffirst\x1fbody line1\nbody line2\n\x1e\n';
+    'f4af4ba733604e395f19ffc8fca5dc1724ea8af7\x1ff6d02d5f547be62a327e6d129d0c010f167329e9\x1fT\x1ft@t.com\x1fT\x1ft@t.com\x1f1782846820\x1f1782846820\x1fsecond\x1f\x1fHEAD -> refs/heads/main\x1e\n' +
+    'f6d02d5f547be62a327e6d129d0c010f167329e9\x1f\x1fT\x1ft@t.com\x1fT\x1ft@t.com\x1f1782846820\x1f1782846820\x1ffirst\x1fbody line1\nbody line2\n\x1f\x1e\n';
 
   it('parses both commits', () => {
     const commits = parseCommitLog(TWO_COMMITS);
     expect(commits).toHaveLength(2);
   });
 
-  it('parses a normal commit with one parent and an empty body', () => {
+  it('parses a normal commit with one parent, an empty body, and the HEAD decoration', () => {
     const commits = parseCommitLog(TWO_COMMITS);
     const second = commits[0];
     expect(second).toEqual({
@@ -644,11 +683,11 @@ describe('parseCommitLog', () => {
       committedAt: 1782846820000,
       subject: 'second',
       body: '',
-      refs: [],
+      refs: [{ _tag: 'Branch', name: 'main', current: true }],
     });
   });
 
-  it('parses a root commit (%P empty -> parents: []) with a multi-line body', () => {
+  it('parses a root commit (%P empty -> parents: [], no decoration -> refs: []) with a multi-line body', () => {
     const commits = parseCommitLog(TWO_COMMITS);
     const first = commits[1];
     expect(first).toEqual({
@@ -666,7 +705,7 @@ describe('parseCommitLog', () => {
 
   it('parses a merge commit (%P = two SHAs -> parents.length === 2)', () => {
     const merge =
-      '9f8e1a2000000000000000000000000000000000\x1f3a2b000000000000000000000000000000000000 4c5d000000000000000000000000000000000000\x1fA\x1fa@a.com\x1fA\x1fa@a.com\x1f1700000000\x1f1700000005\x1fmerge: combine branches\x1f\x1e\n';
+      '9f8e1a2000000000000000000000000000000000\x1f3a2b000000000000000000000000000000000000 4c5d000000000000000000000000000000000000\x1fA\x1fa@a.com\x1fA\x1fa@a.com\x1f1700000000\x1f1700000005\x1fmerge: combine branches\x1f\x1f\x1e\n';
     const commits = parseCommitLog(merge);
     expect(commits).toHaveLength(1);
     expect(commits[0]?.parents).toHaveLength(2);
@@ -678,12 +717,13 @@ describe('parseCommitLog', () => {
 
   it('converts epoch seconds to epoch MS', () => {
     const record =
-      '9f8e1a2000000000000000000000000000000000\x1f3a2b000000000000000000000000000000000000\x1fA\x1fa@a.com\x1fA\x1fa@a.com\x1f1700000000\x1f1700000005\x1ffeat: add engine\x1fbody line\x1e\n';
+      '9f8e1a2000000000000000000000000000000000\x1f3a2b000000000000000000000000000000000000\x1fA\x1fa@a.com\x1fA\x1fa@a.com\x1f1700000000\x1f1700000005\x1ffeat: add engine\x1fbody line\x1ftag: refs/tags/v1.0\x1e\n';
     const [commit] = parseCommitLog(record);
     expect(commit?.authoredAt).toBe(1700000000000);
     expect(commit?.committedAt).toBe(1700000005000);
     expect(commit?.subject).toBe('feat: add engine');
     expect(commit?.body).toBe('body line');
+    expect(commit?.refs).toEqual([{ _tag: 'Tag', name: 'v1.0' }]);
   });
 
   it('returns [] for empty output', () => {
@@ -731,6 +771,9 @@ describe('GitClient.listCommits', () => {
       expect(commits).toHaveLength(2);
       expect(commits[0]?.subject).toBe('second commit');
       expect(commits[1]?.subject).toBe('init');
+      // --decorate=full end-to-end: the tip carries the checked-out `main`; older commits carry nothing.
+      expect(commits[0]?.refs).toEqual([{ _tag: 'Branch', name: 'main', current: true }]);
+      expect(commits[1]?.refs).toEqual([]);
     }).pipe(Effect.provide(GitClient.Default)),
   );
 
