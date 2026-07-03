@@ -18,6 +18,7 @@
     "./identity-avatar": "./src/components/identity-avatar.tsx",
     "./input": "./src/components/input.tsx",
     "./input-group": "./src/components/input-group.tsx",
+    "./ref-pill": "./src/components/ref-pill.tsx",
     "./textarea": "./src/components/textarea.tsx",
     "./toast": "./src/components/toast.tsx",
     "./theme-provider": "./src/components/theme/theme-provider.tsx"

@@ -2,6 +2,7 @@ import type {
   Branch,
   BranchList,
   Commit,
+  Ref,
   Remote,
   RemoteList,
   ResolvedRepository,
@@ -152,9 +153,54 @@ export function parseStashList(stdout: string): Stash[] {
 }
 
 /**
- * Parse the output of `git log` formatted with `--format=%H%x1f%P%x1f%an%x1f%ae%x1f%cn%x1f%ce%x1f%at%x1f%ct%x1f%s%x1f%b%x1e`
+ * Parse one `%D` ref decoration (emitted under `--decorate=full`) into the Refs sitting on that
+ * Commit. Pure function — no IO — so it can be unit-tested against pinned output without
+ * spawning git.
+ *
+ * `--decorate=full` is load-bearing: it emits FULL ref paths, so a local Branch
+ * `feature/pay-fallback` and a remote-tracking `origin/main` — both slash-bearing short names —
+ * stay distinguishable by prefix. Entries are `, `-separated and classified as:
+ *
+ * - `HEAD -> refs/heads/<name>` → `Branch { name, current: true }` (a single Branch; no separate `Head`)
+ * - `refs/heads/<name>`         → `Branch { name, current: false }`
+ * - `refs/remotes/<name>`       → `RemoteBranch { name }` (name keeps the remote prefix, e.g. `origin/main`)
+ * - `tag: refs/tags/<name>`     → `Tag { name }`
+ * - `HEAD` (alone — Detached HEAD) → `Head {}`
+ *
+ * Anything else (e.g. `refs/stash`) is not a Ref the graph draws — skipped.
+ */
+export function parseRefDecoration(decoration: string): Ref[] {
+  const refs: Ref[] = [];
+
+  for (const entry of decoration.split(', ')) {
+    const trimmed = entry.trim();
+    if (trimmed.length === 0) continue;
+
+    if (trimmed.includes(' -> ')) {
+      // `HEAD -> refs/heads/<name>` — the checked-out Branch. One Branch, not a Branch + a Head.
+      const target = trimmed.split(' -> ')[1] ?? '';
+      if (target.startsWith('refs/heads/')) {
+        refs.push({ _tag: 'Branch', name: target.slice('refs/heads/'.length), current: true });
+      }
+    } else if (trimmed.startsWith('tag: refs/tags/')) {
+      refs.push({ _tag: 'Tag', name: trimmed.slice('tag: refs/tags/'.length) });
+    } else if (trimmed.startsWith('refs/heads/')) {
+      refs.push({ _tag: 'Branch', name: trimmed.slice('refs/heads/'.length), current: false });
+    } else if (trimmed.startsWith('refs/remotes/')) {
+      refs.push({ _tag: 'RemoteBranch', name: trimmed.slice('refs/remotes/'.length) });
+    } else if (trimmed === 'HEAD') {
+      refs.push({ _tag: 'Head' });
+    }
+  }
+
+  return refs;
+}
+
+/**
+ * Parse the output of `git log --decorate=full` formatted with
+ * `--format=%H%x1f%P%x1f%an%x1f%ae%x1f%cn%x1f%ce%x1f%at%x1f%ct%x1f%s%x1f%b%x1f%D%x1e`
  * into a `Commit[]`. Each record is RS (`\x1e`)-terminated; fields within a record are US
- * (`\x1f`)-separated. `refs` is always `[]` here — populated in the ref-pills slice.
+ * (`\x1f`)-separated. `refs` comes from the `%D` decoration via `parseRefDecoration`.
  *
  * - `%P` is space-separated parent SHAs (`[]` for a root commit; `length >= 2` is a merge).
  * - `%at` / `%ct` are epoch SECONDS — multiplied by 1000 for the MS fields.
@@ -183,9 +229,10 @@ export function parseCommitLog(raw: string): Commit[] {
     const authoredAtRaw = fields[6] ?? '';
     const committedAtRaw = fields[7] ?? '';
     const subject = fields[8] ?? '';
-    // %b may itself contain newlines; git appends one trailing newline before the %x1e
-    // terminator — trim a single trailing newline only.
+    // %b may itself contain newlines; git appends one trailing newline before the %x1f
+    // separator — trim a single trailing newline only.
     const body = (fields[9] ?? '').replace(/\n$/, '');
+    const decoration = fields[10] ?? '';
 
     commits.push({
       sha,
@@ -196,7 +243,7 @@ export function parseCommitLog(raw: string): Commit[] {
       committedAt: Number(committedAtRaw) * 1000,
       subject,
       body,
-      refs: [],
+      refs: parseRefDecoration(decoration),
     });
   }
 
@@ -403,7 +450,10 @@ export class GitClient extends Effect.Service<GitClient>()('@gitoui/core/GitClie
           'HEAD',
           `--skip=${skip ?? 0}`,
           `--max-count=${limit ?? 300}`,
-          '--format=%H%x1f%P%x1f%an%x1f%ae%x1f%cn%x1f%ce%x1f%at%x1f%ct%x1f%s%x1f%b%x1e',
+          // Full ref paths in %D — the only way to tell a local Branch `feature/x` from a
+          // remote-tracking `origin/main` (see parseRefDecoration).
+          '--decorate=full',
+          '--format=%H%x1f%P%x1f%an%x1f%ae%x1f%cn%x1f%ce%x1f%at%x1f%ct%x1f%s%x1f%b%x1f%D%x1e',
         ]);
         return parseCommitLog(out);
       }).pipe(

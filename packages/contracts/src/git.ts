@@ -150,7 +150,7 @@ export type Stash = typeof Stash.Type;
 export const StashList = Schema.Struct({ stashes: Schema.Array(Stash) });
 export type StashList = typeof StashList.Type;
 
-/** Any named pointer attached to a Commit. ALWAYS `[]` in this slice — populated by the ref-pills slice. */
+/** Any named pointer attached to a Commit — local Branch, remote-tracking Branch, Tag, or the Detached-HEAD marker. */
 export const Ref = Schema.Union(
   Schema.TaggedStruct('Branch', { name: Schema.String, current: Schema.Boolean }),
   Schema.TaggedStruct('RemoteBranch', { name: Schema.String }),
@@ -172,7 +172,7 @@ export const Commit = Schema.Struct({
   committedAt: Schema.Number,
   subject: Schema.String,
   body: Schema.String,
-  /** ALWAYS `[]` in this slice — populated in the ref-pills slice. */
+  /** Refs sitting on this Commit, parsed from the `git log --decorate=full` `%D` decoration. */
   refs: Schema.Array(Ref),
 });
 export type Commit = typeof Commit.Type;
@@ -269,8 +269,8 @@ export const listStashes = defineMethod({
 
 /**
  * Walk the current Branch's history (HEAD), newest first, honoring `skip`/`limit` (default
- * `skip: 0`, `limit: 300`). An empty Repository (unborn HEAD) returns `[]`, not an error. `refs`
- * is always `[]` in this slice (populated in the ref-pills slice). Named `listCommits`, never
+ * `skip: 0`, `limit: 300`). An empty Repository (unborn HEAD) returns `[]`, not an error. Each
+ * Commit carries the Refs sitting on it (`--decorate=full`). Named `listCommits`, never
  * `getLog` — "log" is git plumbing kept out of the domain (see CONTEXT.md).
  */
 export const listCommits = defineMethod({

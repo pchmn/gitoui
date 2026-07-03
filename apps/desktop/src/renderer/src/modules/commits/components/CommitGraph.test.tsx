@@ -66,6 +66,56 @@ describe('CommitGraph rows', () => {
   });
 });
 
+describe('CommitGraph refs', () => {
+  it('renders a pill per ref, with the current branch emphasized and remote/tag quieter', async () => {
+    const commits = [
+      makeCommit({
+        sha: 'tip',
+        subject: 'the decorated tip',
+        refs: [
+          { _tag: 'Branch', name: 'main', current: true },
+          { _tag: 'RemoteBranch', name: 'origin/main' },
+          { _tag: 'Tag', name: 'v2.3.0' },
+        ],
+      }),
+      makeCommit({ sha: 'plain', subject: 'an undecorated commit', committedAt: 1_000 }),
+    ];
+    render(<Wrapper listCommitsMock={() => Promise.resolve(commits)} />);
+
+    await screen.findByText('the decorated tip');
+    expect(screen.getByText('main').getAttribute('data-emphasis')).toBe('strong');
+    expect(screen.getByText('origin/main').getAttribute('data-emphasis')).toBe('quiet');
+    expect(screen.getByText('v2.3.0').getAttribute('data-emphasis')).toBe('quiet');
+  });
+
+  it('renders a non-current branch pill at default emphasis', async () => {
+    const commits = [
+      makeCommit({ refs: [{ _tag: 'Branch', name: 'feature/pay-fallback', current: false }] }),
+    ];
+    render(<Wrapper listCommitsMock={() => Promise.resolve(commits)} />);
+
+    const pill = await screen.findByText('feature/pay-fallback');
+    expect(pill.getAttribute('data-emphasis')).toBe('default');
+  });
+
+  it('renders a strong HEAD marker for a detached HEAD', async () => {
+    const commits = [makeCommit({ refs: [{ _tag: 'Head' }] })];
+    render(<Wrapper listCommitsMock={() => Promise.resolve(commits)} />);
+
+    const pill = await screen.findByText('HEAD');
+    expect(pill.getAttribute('data-emphasis')).toBe('strong');
+  });
+
+  it('renders no pills for a commit with no refs', async () => {
+    const { container } = render(
+      <Wrapper listCommitsMock={() => Promise.resolve([makeCommit({ refs: [] })])} />,
+    );
+
+    await screen.findByText('feat: add engine');
+    expect(container.querySelector('[data-slot="ref-pill"]')).toBeNull();
+  });
+});
+
 describe('CommitGraph ordering', () => {
   // The TanStack DB collection is keyed by `sha`, so without an explicit `orderBy` rows come out in
   // sha order, not chronological. Feed them out of order and assert newest-commit-date-first.
