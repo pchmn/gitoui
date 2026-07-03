@@ -31,6 +31,8 @@ function stubGit(listBranches?: () => Promise<BranchList>) {
         : vi.fn().mockResolvedValue({ branches: [], head: { _tag: 'OnBranch', branch: 'main' } }),
     createBranch: vi.fn().mockResolvedValue(undefined),
     switchBranch: vi.fn().mockResolvedValue(undefined),
+    // AppShell now renders CommitGraph in <main> (issue #42) — stub so it doesn't throw on mount.
+    listCommits: vi.fn().mockResolvedValue([]),
     openRepository: vi.fn().mockResolvedValue('/repo'),
     listRecentRepositories: vi.fn().mockResolvedValue([]),
     removeRecentRepository: vi.fn().mockResolvedValue(undefined),

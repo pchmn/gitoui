@@ -32,12 +32,15 @@ function initialOf(name: string): string {
 export function IdentityAvatar({
   name,
   seed,
+  shape = 'tile',
   className,
 }: {
   /** Display name; its first character becomes the glyph. */
   readonly name: string;
   /** Stable identity key (e.g. the canonical path). Falls back to `name`. */
   readonly seed?: string;
+  /** `'tile'` (default, `rounded-sm` — Repository avatar) or `'circle'` (`rounded-full` — Commit author avatar, DESIGN §5 Identity avatars). */
+  readonly shape?: 'tile' | 'circle';
   readonly className?: string;
 }) {
   const offset = HUE_BUCKETS[hashString(seed ?? name) % HUE_BUCKETS.length] ?? 0;
@@ -47,7 +50,8 @@ export function IdentityAvatar({
       data-slot='identity-avatar'
       aria-hidden
       className={cn(
-        'flex size-5 shrink-0 items-center justify-center rounded-sm text-[0.625rem] font-semibold leading-none select-none',
+        'flex size-5 shrink-0 items-center justify-center text-[0.625rem] font-semibold leading-none select-none',
+        shape === 'circle' ? 'rounded-full' : 'rounded-sm',
         className,
       )}
       style={{

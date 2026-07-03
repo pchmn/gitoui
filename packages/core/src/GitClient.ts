@@ -1,6 +1,7 @@
 import type {
   Branch,
   BranchList,
+  Commit,
   Remote,
   RemoteList,
   ResolvedRepository,
@@ -148,6 +149,58 @@ export function parseStashList(stdout: string): Stash[] {
     stashes.push({ id, message: subject });
   }
   return stashes;
+}
+
+/**
+ * Parse the output of `git log` formatted with `--format=%H%x1f%P%x1f%an%x1f%ae%x1f%cn%x1f%ce%x1f%at%x1f%ct%x1f%s%x1f%b%x1e`
+ * into a `Commit[]`. Each record is RS (`\x1e`)-terminated; fields within a record are US
+ * (`\x1f`)-separated. `refs` is always `[]` here — populated in the ref-pills slice.
+ *
+ * - `%P` is space-separated parent SHAs (`[]` for a root commit; `length >= 2` is a merge).
+ * - `%at` / `%ct` are epoch SECONDS — multiplied by 1000 for the MS fields.
+ * - `%b` may itself contain newlines (it's the last field before the RS terminator); only a single
+ *   trailing newline is trimmed.
+ *
+ * Pure function — no IO — so it can be unit-tested against pinned output without spawning git.
+ */
+export function parseCommitLog(raw: string): Commit[] {
+  const commits: Commit[] = [];
+
+  // Drop the trailing record left by the final RS terminator — git appends a '\n' after it, so
+  // the leftover is "\n", not "" (hence trim, not a bare length check).
+  const records = raw.split('\x1e').filter((record) => record.trim().length > 0);
+
+  for (const record of records) {
+    // git emits a '\n' after each record's RS terminator, which becomes a leading '\n' on every
+    // record but the first once split on '\x1e' — strip it before field-splitting.
+    const fields = record.replace(/^\n/, '').split('\x1f');
+    const sha = fields[0] ?? '';
+    const parentsRaw = fields[1] ?? '';
+    const authorName = fields[2] ?? '';
+    const authorEmail = fields[3] ?? '';
+    const committerName = fields[4] ?? '';
+    const committerEmail = fields[5] ?? '';
+    const authoredAtRaw = fields[6] ?? '';
+    const committedAtRaw = fields[7] ?? '';
+    const subject = fields[8] ?? '';
+    // %b may itself contain newlines; git appends one trailing newline before the %x1e
+    // terminator — trim a single trailing newline only.
+    const body = (fields[9] ?? '').replace(/\n$/, '');
+
+    commits.push({
+      sha,
+      parents: parentsRaw.split(' ').filter(Boolean),
+      author: { name: authorName, email: authorEmail },
+      committer: { name: committerName, email: committerEmail },
+      authoredAt: Number(authoredAtRaw) * 1000,
+      committedAt: Number(committedAtRaw) * 1000,
+      subject,
+      body,
+      refs: [],
+    });
+  }
+
+  return commits;
 }
 
 /**
@@ -330,5 +383,39 @@ export class GitClient extends Effect.Service<GitClient>()('@gitoui/core/GitClie
         const stashes = parseStashList(out);
         return { stashes } satisfies StashList;
       }).pipe(Effect.catchTag('GitProcessError', () => new RepoNotFoundError({ path: repoPath }))),
+
+    /**
+     * Walk the current Branch's history from HEAD (issue #42 — the commit graph's walking
+     * skeleton). `skip`/`limit` default to `0`/`300`. An empty Repository (unborn HEAD) makes
+     * `git log HEAD` exit non-zero — git phrases this either as "does not have any commits yet"
+     * (bare `git log`) or "unknown revision or path not in the working tree" (an explicit but
+     * unborn `HEAD`, which is what we pass) — both caught and mapped to `[]`, NOT an error; every
+     * other failure still maps to `RepoNotFoundError`, same as the other list* methods.
+     */
+    listCommits: (
+      repoPath: string,
+      skip?: number,
+      limit?: number,
+    ): Effect.Effect<Commit[], RepoNotFoundError> =>
+      withGit(repoPath, async (git) => {
+        const out = await git.raw([
+          'log',
+          'HEAD',
+          `--skip=${skip ?? 0}`,
+          `--max-count=${limit ?? 300}`,
+          '--format=%H%x1f%P%x1f%an%x1f%ae%x1f%cn%x1f%ce%x1f%at%x1f%ct%x1f%s%x1f%b%x1e',
+        ]);
+        return parseCommitLog(out);
+      }).pipe(
+        Effect.catchTag('GitProcessError', (e) => {
+          const message = e.cause instanceof Error ? e.cause.message : String(e.cause);
+          const isUnbornHead =
+            message.includes('does not have any commits yet') ||
+            message.includes('unknown revision or path not in the working tree');
+          return isUnbornHead
+            ? Effect.succeed([])
+            : Effect.fail(new RepoNotFoundError({ path: repoPath }));
+        }),
+      ),
   },
 }) {}

@@ -5,7 +5,9 @@ import type {
 } from '@gitoui/contracts/desktop';
 import type {
   BranchList,
+  Commit,
   CreateBranchInput,
+  ListCommitsInput,
   RemoteList,
   RepoInput,
   ResolvedRepository,
@@ -60,6 +62,8 @@ const git = {
     invoke(CHANNELS.git.listTags, input) as Promise<TagList>,
   listStashes: (input: RepoInput): Promise<StashList> =>
     invoke(CHANNELS.git.listStashes, input) as Promise<StashList>,
+  listCommits: (input: ListCommitsInput): Promise<readonly Commit[]> =>
+    invoke(CHANNELS.git.listCommits, input) as Promise<readonly Commit[]>,
 };
 
 const desktop = {

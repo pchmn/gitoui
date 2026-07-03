@@ -36,6 +36,15 @@ _Avoid_: using "diff" for a Change (reserve **diff** for the textual rendering o
 A recorded snapshot in history — one object, identified by its SHA. (Noun.)
 _Avoid_: revision, changeset.
 
+**Commit graph** (the graph):
+The center view and the product's protagonist — the repository's Commits walked from a
+scope of Refs (HEAD first, all Refs later), laid out top-to-bottom with colored **lanes**
+drawing branches and merges. The visual rendering *of* the Commits, the way a diff is the
+rendering of a Change. "The graph" casually.
+_Avoid_: "log" (git plumbing — kept out of UI and domain code, like index/cache);
+"revision history". The per-file commit list shown in the Code & Diff view is **File
+history** (always qualified) — never bare "History", which would collide with the graph.
+
 **Branch**:
 A movable named pointer to a Commit. A *local branch* vs a *remote-tracking branch* (e.g. `origin/main`).
 _Avoid_: using "ref" when you specifically mean a branch.

@@ -22,6 +22,7 @@
     "@gitoui/core": "workspace:*",
     "@gitoui/ui": "workspace:*",
     "@phosphor-icons/react": "catalog:",
+    "@tanstack/query-db-collection": "catalog:",
     "@tanstack/react-db": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-router": "catalog:",

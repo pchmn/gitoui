@@ -67,6 +67,11 @@ export const messages = {
     emptyYet: 'No stashes yet.',
     emptyFiltered: 'No stashes match filter.',
   },
+  commitGraph: {
+    failedToLoad: 'Failed to load commits.',
+    repoNotFound: (path: string) => `Repository not found: ${path}`,
+    emptyYet: 'No commits yet.',
+  },
   branchSelector: {
     filterPlaceholder: 'Filter branches…',
     empty: 'No branches found.',

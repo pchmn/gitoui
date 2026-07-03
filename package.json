@@ -30,6 +30,9 @@
       "electron",
       "esbuild",
       "@swc/core"
-    ]
+    ],
+    "overrides": {
+      "@tanstack/db": "0.6.13"
+    }
   }
 }

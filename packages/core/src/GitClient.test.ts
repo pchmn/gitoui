@@ -7,6 +7,7 @@ import { Effect } from 'effect';
 import { afterAll, beforeAll, describe, expect } from 'vitest';
 import {
   GitClient,
+  parseCommitLog,
   parseForEachRef,
   parseOverwriteError,
   parseRemoteTrackingRefs,
@@ -613,4 +614,148 @@ describe('parseStashList', () => {
     expect(parseStashList('')).toEqual([]);
     expect(parseStashList('   \n  ')).toEqual([]);
   });
+});
+
+// --- parseCommitLog unit tests (pure, pinned output) ---
+
+describe('parseCommitLog', () => {
+  // Pinned output captured from a real `git log --format=%H%x1f%P%x1f%an%x1f%ae%x1f%cn%x1f%ce%x1f%at%x1f%ct%x1f%s%x1f%b%x1e`:
+  // two commits, newest first — "second" (a plain commit, root parent) and "first" (the root
+  // commit, %P empty, multi-line %b). Each record is RS (\x1e)-terminated and git appends its own
+  // trailing '\n' after each terminator, which becomes a leading '\n' on every record but the first.
+  const TWO_COMMITS =
+    'f4af4ba733604e395f19ffc8fca5dc1724ea8af7\x1ff6d02d5f547be62a327e6d129d0c010f167329e9\x1fT\x1ft@t.com\x1fT\x1ft@t.com\x1f1782846820\x1f1782846820\x1fsecond\x1f\x1e\n' +
+    'f6d02d5f547be62a327e6d129d0c010f167329e9\x1f\x1fT\x1ft@t.com\x1fT\x1ft@t.com\x1f1782846820\x1f1782846820\x1ffirst\x1fbody line1\nbody line2\n\x1e\n';
+
+  it('parses both commits', () => {
+    const commits = parseCommitLog(TWO_COMMITS);
+    expect(commits).toHaveLength(2);
+  });
+
+  it('parses a normal commit with one parent and an empty body', () => {
+    const commits = parseCommitLog(TWO_COMMITS);
+    const second = commits[0];
+    expect(second).toEqual({
+      sha: 'f4af4ba733604e395f19ffc8fca5dc1724ea8af7',
+      parents: ['f6d02d5f547be62a327e6d129d0c010f167329e9'],
+      author: { name: 'T', email: 't@t.com' },
+      committer: { name: 'T', email: 't@t.com' },
+      authoredAt: 1782846820000,
+      committedAt: 1782846820000,
+      subject: 'second',
+      body: '',
+      refs: [],
+    });
+  });
+
+  it('parses a root commit (%P empty -> parents: []) with a multi-line body', () => {
+    const commits = parseCommitLog(TWO_COMMITS);
+    const first = commits[1];
+    expect(first).toEqual({
+      sha: 'f6d02d5f547be62a327e6d129d0c010f167329e9',
+      parents: [],
+      author: { name: 'T', email: 't@t.com' },
+      committer: { name: 'T', email: 't@t.com' },
+      authoredAt: 1782846820000,
+      committedAt: 1782846820000,
+      subject: 'first',
+      body: 'body line1\nbody line2',
+      refs: [],
+    });
+  });
+
+  it('parses a merge commit (%P = two SHAs -> parents.length === 2)', () => {
+    const merge =
+      '9f8e1a2000000000000000000000000000000000\x1f3a2b000000000000000000000000000000000000 4c5d000000000000000000000000000000000000\x1fA\x1fa@a.com\x1fA\x1fa@a.com\x1f1700000000\x1f1700000005\x1fmerge: combine branches\x1f\x1e\n';
+    const commits = parseCommitLog(merge);
+    expect(commits).toHaveLength(1);
+    expect(commits[0]?.parents).toHaveLength(2);
+    expect(commits[0]?.parents).toEqual([
+      '3a2b000000000000000000000000000000000000',
+      '4c5d000000000000000000000000000000000000',
+    ]);
+  });
+
+  it('converts epoch seconds to epoch MS', () => {
+    const record =
+      '9f8e1a2000000000000000000000000000000000\x1f3a2b000000000000000000000000000000000000\x1fA\x1fa@a.com\x1fA\x1fa@a.com\x1f1700000000\x1f1700000005\x1ffeat: add engine\x1fbody line\x1e\n';
+    const [commit] = parseCommitLog(record);
+    expect(commit?.authoredAt).toBe(1700000000000);
+    expect(commit?.committedAt).toBe(1700000005000);
+    expect(commit?.subject).toBe('feat: add engine');
+    expect(commit?.body).toBe('body line');
+  });
+
+  it('returns [] for empty output', () => {
+    expect(parseCommitLog('')).toEqual([]);
+  });
+});
+
+// --- GitClient.listCommits integration tests ---
+
+describe('GitClient.listCommits', () => {
+  let base: string;
+  let repo: string;
+  let emptyRepo: string;
+
+  const g = (cwd: string, ...args: string[]) =>
+    execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+
+  beforeAll(() => {
+    base = realpathSync(mkdtempSync(join(tmpdir(), 'gitoui-commits-')));
+    repo = join(base, 'repo');
+    emptyRepo = join(base, 'empty');
+    mkdirSync(repo, { recursive: true });
+    mkdirSync(emptyRepo, { recursive: true });
+    execFileSync('git', ['init', '-q', '-b', 'main', repo], { cwd: base });
+    execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: repo });
+    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: repo });
+    writeFileSync(join(repo, 'a.txt'), 'a');
+    g(repo, 'add', 'a.txt');
+    g(repo, 'commit', '-m', 'init');
+    writeFileSync(join(repo, 'b.txt'), 'b');
+    g(repo, 'add', 'b.txt');
+    g(repo, 'commit', '-m', 'second commit');
+
+    execFileSync('git', ['init', '-q', '-b', 'main', emptyRepo], { cwd: base });
+    execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: emptyRepo });
+    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: emptyRepo });
+  });
+
+  afterAll(() => rmSync(base, { recursive: true, force: true }));
+
+  it.effect('returns commits from HEAD, newest first', () =>
+    Effect.gen(function* () {
+      const client = yield* GitClient;
+      const commits = yield* client.listCommits(repo);
+      expect(commits).toHaveLength(2);
+      expect(commits[0]?.subject).toBe('second commit');
+      expect(commits[1]?.subject).toBe('init');
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('honors skip and limit', () =>
+    Effect.gen(function* () {
+      const client = yield* GitClient;
+      const commits = yield* client.listCommits(repo, 1, 1);
+      expect(commits).toHaveLength(1);
+      expect(commits[0]?.subject).toBe('init');
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('returns [] for an empty repository (unborn HEAD)', () =>
+    Effect.gen(function* () {
+      const client = yield* GitClient;
+      const commits = yield* client.listCommits(emptyRepo);
+      expect(commits).toEqual([]);
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('fails with RepoNotFoundError for a bad path', () =>
+    Effect.gen(function* () {
+      const client = yield* GitClient;
+      const error = yield* Effect.flip(client.listCommits(join(base, 'does-not-exist')));
+      expect(error._tag).toBe('RepoNotFoundError');
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
 });
