@@ -1,8 +1,10 @@
 import type { Ref } from '@gitoui/contracts/git';
 import { IdentityAvatar } from '@gitoui/ui/identity-avatar';
+import { cn } from '@gitoui/ui/lib/utils';
 import { RefPill } from '@gitoui/ui/ref-pill';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useRef } from 'react';
+import { useCommitSelection } from '#renderer/modules/commits/CommitSelectionContext';
 import type { GitError } from '#renderer/shared/git/errors';
 import { messages } from '#renderer/shared/messages/messages';
 import { matchError } from '#renderer/shared/utils/matchError';
@@ -21,8 +23,9 @@ const LOAD_MORE_THRESHOLD = 20;
  * loads a first page instantly, and scrolling toward the loaded end requests the next one. Columns
  * per DESIGN.md `GRAPH · REFS` / `COMMIT` / `AUTHOR` — GRAPH · REFS carries the Refs sitting on each
  * Commit as pills (issue #43; lanes come in a later slice), COMMIT shows the subject, AUTHOR shows
- * the author's circular avatar + name + a relative date. No row selection — that lands with the
- * lanes slice.
+ * the author's circular avatar + name + a relative date. Clicking a row selects its Commit (issue
+ * #46, via `CommitSelectionContext`) — Accent Surface when selected, Muted Surface on hover, per
+ * DESIGN.md's list-row spec. Keyboard navigation through Commits is out of scope here.
  *
  * Mirrors `BranchesSection`'s loading/error/empty states, adapted to the center column: skeleton
  * rows on pending (no spinner), a centered "No commits yet" empty state, and — since the primary
@@ -40,6 +43,7 @@ export function CommitGraph({ root }: { root: string }) {
     fetchNextPage,
     retry,
   } = useCommits(root);
+  const { selectedSha, selectCommit } = useCommitSelection();
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const rowCount = commits?.length ?? 0;
@@ -151,11 +155,29 @@ export function CommitGraph({ root }: { root: string }) {
           const commit = commits[virtualRow.index];
           if (!commit) return null;
 
+          const sha = commit.sha;
+          const isRowSelected = sha === selectedSha;
+
+          function handleSelect() {
+            selectCommit(sha);
+          }
+
           return (
             <li
               key={commit.sha}
               style={style}
-              className='flex items-center gap-3 border-b border-border/50 px-3 text-xs'
+              className={cn(
+                'flex cursor-default items-center gap-3 border-b border-border/50 px-3 text-xs hover:bg-muted',
+                isRowSelected && 'bg-accent',
+              )}
+              data-selected={isRowSelected}
+              onClick={handleSelect}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  handleSelect();
+                }
+              }}
             >
               {/* GRAPH · REFS column — ref pills on decorated Commits (lanes come in a later slice). */}
               {commit.refs.length === 0 ? (

@@ -5,9 +5,25 @@
 import type { Commit } from '@gitoui/contracts/git';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, render, screen } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { CommitSelectionProvider } from '#renderer/modules/commits/CommitSelectionContext';
+import { ActiveRepositoryProvider } from '#renderer/modules/repository/ActiveRepositoryContext';
 import { commitsKey, PAGE_LIMIT } from '../hooks/useCommits';
 import { CommitGraph } from './CommitGraph';
+
+/**
+ * `CommitSelectionContext` resets on active-repo change (mirroring `SelectionContext`), so it
+ * reads `useActiveRepository` and needs an `ActiveRepositoryProvider` ancestor in every test —
+ * independent from the `root` prop `CommitGraph` itself takes for querying commits.
+ */
+function TestProviders({ children }: { children: ReactNode }) {
+  return (
+    <ActiveRepositoryProvider>
+      <CommitSelectionProvider>{children}</CommitSelectionProvider>
+    </ActiveRepositoryProvider>
+  );
+}
 
 // TanStack Virtual reads the scroll container's `offsetHeight`/`offsetWidth` to size its viewport
 // (`@tanstack/virtual-core`'s `getRect`). happy-dom has no real layout engine, so both are 0 by
@@ -65,7 +81,9 @@ function Wrapper({
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
     <QueryClientProvider client={queryClient}>
-      <CommitGraph root={root} />
+      <TestProviders>
+        <CommitGraph root={root} />
+      </TestProviders>
     </QueryClientProvider>
   );
 }
@@ -293,14 +311,18 @@ describe('CommitGraph freshness', () => {
 
     const { rerender } = render(
       <QueryClientProvider client={queryClient}>
-        <CommitGraph root='/repoA' />
+        <TestProviders>
+          <CommitGraph root='/repoA' />
+        </TestProviders>
       </QueryClientProvider>,
     );
     await screen.findByText('commit in repo A');
 
     rerender(
       <QueryClientProvider client={queryClient}>
-        <CommitGraph root='/repoB' />
+        <TestProviders>
+          <CommitGraph root='/repoB' />
+        </TestProviders>
       </QueryClientProvider>,
     );
     await screen.findByText('commit in repo B');
@@ -317,7 +339,9 @@ describe('CommitGraph freshness', () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <CommitGraph root='/repo' />
+        <TestProviders>
+          <CommitGraph root='/repo' />
+        </TestProviders>
       </QueryClientProvider>,
     );
     await screen.findByText('on the old branch');
@@ -344,7 +368,9 @@ describe('CommitGraph freshness', () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <CommitGraph root='/repo' />
+        <TestProviders>
+          <CommitGraph root='/repo' />
+        </TestProviders>
       </QueryClientProvider>,
     );
     await screen.findByText('short branch tip');
@@ -374,7 +400,9 @@ describe('CommitGraph freshness', () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <CommitGraph root='/repo' />
+        <TestProviders>
+          <CommitGraph root='/repo' />
+        </TestProviders>
       </QueryClientProvider>,
     );
     await screen.findByText('commit #0');
@@ -452,5 +480,36 @@ describe('CommitGraph pagination', () => {
     await scrollTo(320 * 32);
     // The end of history: no further requests once the window came back shorter than requested.
     expect(listCommitsMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('CommitGraph selection', () => {
+  it('clicking a row selects its commit, and clicking another row moves the selection', async () => {
+    const commits = [
+      makeCommit({ sha: 'a1', subject: 'feat: add engine' }),
+      makeCommit({ sha: 'a2', subject: 'fix: leak' }),
+    ];
+    render(<Wrapper listCommitsMock={() => Promise.resolve(commits)} />);
+
+    const firstRow = (await screen.findByText('feat: add engine')).closest('li');
+    const secondRow = screen.getByText('fix: leak').closest('li');
+    if (!firstRow || !secondRow) throw new Error('commit rows not found');
+
+    // Neither row starts selected.
+    expect(firstRow.getAttribute('data-selected')).toBe('false');
+    expect(secondRow.getAttribute('data-selected')).toBe('false');
+
+    await act(async () => {
+      firstRow.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(firstRow.getAttribute('data-selected')).toBe('true');
+    expect(secondRow.getAttribute('data-selected')).toBe('false');
+
+    // Selecting the other row moves the selection — the first is no longer selected.
+    await act(async () => {
+      secondRow.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(firstRow.getAttribute('data-selected')).toBe('false');
+    expect(secondRow.getAttribute('data-selected')).toBe('true');
   });
 });
