@@ -34,7 +34,6 @@ export function CommitGraph({ root }: { root: string }) {
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
-    resetToken,
   } = useCommits(root);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -50,16 +49,17 @@ export function CommitGraph({ root }: { root: string }) {
   });
   const virtualItems = virtualizer.getVirtualItems();
 
-  // A page-1 reset (repo/branch switch) replaces the loaded window — the retained scroll offset
-  // would point into rows of the *previous* history, so snap back to the top of the new one.
-  // `scrollToOffset` (not a bare `scrollTop` write) so the virtualizer's internal offset updates
-  // in the same tick. Initial mount bumps the token too; scrolling to 0 there is a no-op.
-  const lastResetToken = useRef(resetToken);
+  // A different Commit at the head of the list means a different history (repo or Branch switch —
+  // load-more appends never touch the head), so a scroll offset retained from the previous one
+  // would be meaningless: snap back to the top. `scrollToOffset` (not a bare `scrollTop` write)
+  // so the virtualizer's internal offset updates in the same tick.
+  const headSha = commits?.[0]?.sha;
+  const lastHeadSha = useRef(headSha);
   useEffect(() => {
-    if (lastResetToken.current === resetToken) return;
-    lastResetToken.current = resetToken;
+    if (lastHeadSha.current === headSha) return;
+    lastHeadSha.current = headSha;
     virtualizer.scrollToOffset(0);
-  }, [resetToken, virtualizer]);
+  }, [headSha, virtualizer]);
 
   // Trigger the next page once the viewport nears the end of the loaded set.
   useEffect(() => {
@@ -71,8 +71,9 @@ export function CommitGraph({ root }: { root: string }) {
     }
   }, [virtualItems, rowCount, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  // Loading state — show skeleton rows, no spinner.
-  if (isLoading) {
+  // Loading state — show skeleton rows, no spinner. Only without data: growing the loaded window
+  // recompiles the live query, and the already-loaded rows must keep showing through it.
+  if (isLoading && (commits === undefined || commits.length === 0)) {
     return <CommitGraphSkeleton />;
   }
 

@@ -1,155 +1,147 @@
 import type { Commit } from '@gitoui/contracts/git';
 import type { QueryCollectionUtils } from '@tanstack/query-db-collection';
-import { queryCollectionOptions } from '@tanstack/query-db-collection';
+import { parseLoadSubsetOptions, queryCollectionOptions } from '@tanstack/query-db-collection';
 import type { Collection } from '@tanstack/react-db';
-import { createCollection, useLiveQuery } from '@tanstack/react-db';
+import { createCollection, eq } from '@tanstack/react-db';
+import type { QueryClient } from '@tanstack/react-query';
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLivePaginatedQuery } from '#renderer/shared/hooks/useLivePaginatedQuery';
 
-/** Query key factory for the commit list. Scoped to the repo path so it invalidates correctly on repo/branch switch. */
+/**
+ * Query key factory for one Repository's commit subsets. `['commits']` is the collection's base
+ * prefix (`queryKey({})`), and every derived subset key starts `['commits', repoPath, ...]` — so
+ * `invalidateQueries(commitsKey(root))` on a Branch switch reaches all of that repo's loaded
+ * subsets by TanStack Query's prefix matching, and no other repo's.
+ */
 export const commitsKey = (repoPath: string) => ['commits', repoPath] as const;
 
-/** Page size for both the initial load and every subsequent load-more request (issue #44). */
+/** Page size for the infinite live query (issue #44). */
 export const PAGE_LIMIT = 300;
 
 /**
- * TanStack DB's `queryCollectionOptions` (no `schema` given) wants a mutable item type — `Commit`
- * (from `effect/Schema`, all-`readonly`) doesn't satisfy that structurally. A local mutable mirror,
- * not a redefinition: assignable both ways, so `window.git.listCommits`'s readonly result still
- * flows in unchanged.
+ * A `Commit` row in the collection. Two deltas from the contract type: mutable (TanStack DB's
+ * `queryCollectionOptions` without a `schema` wants a mutable item type — `effect/Schema` types
+ * are all-`readonly`), and tagged with the `repoPath` it belongs to, because the collection holds
+ * *all* repos' commits and live queries narrow by `where(eq(commits.repoPath, …))`.
  */
-type CommitRow = { -readonly [K in keyof Commit]: Commit[K] };
+type CommitRow = { -readonly [K in keyof Commit]: Commit[K] } & { repoPath: string };
+
+type CommitsCollection = Collection<CommitRow, string | number, QueryCollectionUtils<CommitRow>>;
 
 /**
- * The offset cursor for the *next* page, kept alongside the collection instance rather than in the
- * component (issue #44, the query-backed-collection glue, docs/decisions.md §6/§8). A plain mutable
- * object (not React state) because it's an implementation detail of "what to ask for next" — the
- * loaded rows themselves are the collection; `hasNextPage`/`isFetchingNextPage` are the only bits
- * the UI needs to react to, so those alone are state.
- */
-type Cursor = { skip: number };
-
-/**
- * The `commits` collection (`queryCollectionOptions`), fed page-by-page from `listCommits`. The
- * `queryFn` always fetches **page 1** (`skip: 0`) — mounting and `invalidateQueries(commitsKey)`
- * (repo/Branch switch, decision kept from issue #42) both replace the collection's entire contents
- * with that first page, which is exactly the "reset the loaded window" rule. `fetchNextPage` is the
- * separate, additive path: it fetches one more page at the current cursor and `writeUpsert`s it
- * into the collection directly (bypassing TanStack Query, per `QueryCollectionUtils`), so pages
- * accumulate (append, dedup by `sha`) instead of replacing.
+ * The single `commits` collection — one module-scope, long-lived store for every Repository (the
+ * TanStack DB model: one logical collection serving different subsets, docs/decisions.md §6/§8),
+ * never a per-render or per-repo object. `syncMode: 'on-demand'` pushes each live query's
+ * predicates down to the `queryFn` via `ctx.meta.loadSubsetOptions`: the `where` filter names the
+ * repo, `offset`/`limit` become `listCommits`'s `skip`/`limit`. TanStack DB reconciles by
+ * per-subset row ownership, so a Branch-switch refetch evicts the Commits its subset no longer
+ * returns instead of merging over them.
  *
- * Mirrors `useBranches` in shape — disabled when no Repository is open.
+ * Memoized per `QueryClient` purely so each test's isolated client gets its own collection; the
+ * app has exactly one client, hence exactly one collection.
+ */
+const collections = new WeakMap<QueryClient, CommitsCollection>();
+
+function commitsCollection(queryClient: QueryClient): CommitsCollection {
+  const existing = collections.get(queryClient);
+  if (existing) return existing;
+
+  const repoPathOf = (
+    filters: { field: (string | number)[]; operator: string; value?: unknown }[],
+  ) =>
+    filters.find((f) => f.field[0] === 'repoPath' && f.operator === 'eq')?.value as
+      | string
+      | undefined;
+
+  const collection = createCollection(
+    queryCollectionOptions<CommitRow>({
+      // `offset` is read off the raw options: this version's `parseLoadSubsetOptions` doesn't
+      // surface it yet (it's on `LoadSubsetOptions` itself).
+      queryKey: (opts) => {
+        const { filters, limit } = parseLoadSubsetOptions(opts);
+        const key: (string | number)[] = ['commits'];
+        const repoPath = repoPathOf(filters);
+        if (repoPath !== undefined) key.push(repoPath);
+        if (opts?.offset) key.push(`skip-${opts.offset}`);
+        if (limit) key.push(`limit-${limit}`);
+        return key;
+      },
+      syncMode: 'on-demand',
+      queryFn: async (ctx) => {
+        const opts = ctx.meta?.loadSubsetOptions;
+        const { filters, limit } = parseLoadSubsetOptions(opts);
+        const repoPath = repoPathOf(filters);
+        // No repo in the predicate (or the "no Repository open" sentinel): nothing to fetch —
+        // an empty subset owns no rows, so it evicts nothing.
+        if (repoPath === undefined || repoPath === '') return [];
+        const commits = await window.git.listCommits({
+          repoPath,
+          skip: opts?.offset ?? 0,
+          limit: limit ?? PAGE_LIMIT,
+        });
+        return commits.map((commit) => ({ ...commit, repoPath }));
+      },
+      // A sha alone isn't unique across Repositories (clones, forks) — scope the key by repo.
+      getKey: (commit) => `${commit.repoPath}:${commit.sha}`,
+      queryClient,
+    }),
+  );
+  collections.set(queryClient, collection);
+  return collection;
+}
+
+/**
+ * The Commit history for a Repository: a paginated live query over the shared `commits`
+ * collection, narrowed by `where(eq(repoPath))` (issue #44). `useLivePaginatedQuery` owns the
+ * pagination mechanics (growing `limit`, `hasNextPage`, held rows across recompiles); a Branch
+ * switch refreshes in place via `invalidateQueries(commitsKey)` (decision kept from issue #42) —
+ * the loaded window keeps its size and the subsets refetch against the new HEAD.
+ *
+ * Mirrors `useBranches` in shape — disabled (empty) when no Repository is open.
  */
 export function useCommits(repoPath: string | null): {
   data: CommitRow[] | undefined;
   isLoading: boolean;
   isError: boolean;
-  /** `false` once a page has come back shorter than `PAGE_LIMIT` — the real end of history. */
+  /** `true` while the loaded window is full — history *may* extend past it. */
   hasNextPage: boolean;
   /** A page is in flight for the load-more path (not the initial/reset load — that's `isLoading`). */
   isFetchingNextPage: boolean;
-  /** Request the next page at the current cursor. No-op while fetching or once history is exhausted. */
+  /** Grow the loaded window by one page. No-op while fetching or once history is exhausted. */
   fetchNextPage: () => void;
-  /**
-   * Bumps every time a fresh page 1 replaces the loaded window (mount, repo switch, branch-switch
-   * invalidation) — the signal that a retained scroll offset now points into rows that may no
-   * longer exist. Load-more appends never bump it.
-   */
-  resetToken: number;
 } {
   const queryClient = useQueryClient();
-  const [hasNextPage, setHasNextPage] = useState(true);
-  const [isFetchingNextPage, setIsFetchingNextPage] = useState(false);
-  const [resetToken, setResetToken] = useState(0);
+  const collection = commitsCollection(queryClient);
 
-  // A repo switch resets the window optimistically (before the new page-1 fetch resolves) so the
-  // previous repo's `hasNextPage`/`isFetchingNextPage` never leaks into the new one, even briefly.
-  useEffect(() => {
-    setHasNextPage(true);
-    setIsFetchingNextPage(false);
-  }, [repoPath]);
-
-  const page = useMemo((): {
-    collection: Collection<CommitRow, string | number, QueryCollectionUtils<CommitRow>>;
-    cursor: Cursor;
-  } | null => {
-    if (repoPath === null) return null;
-    const cursor: Cursor = { skip: 0 };
-    const collection = createCollection(
-      queryCollectionOptions<CommitRow>({
-        queryKey: commitsKey(repoPath),
-        // Always page 1 — both the initial mount and every `invalidateQueries(commitsKey)` refetch
-        // land here, and `queryCollectionOptions` treats the result as the *complete* collection
-        // state, so this doubles as the "reset to page 1" behavior for free.
-        queryFn: async () => {
-          const rows: CommitRow[] = [
-            ...(await window.git.listCommits({ repoPath, skip: 0, limit: PAGE_LIMIT })),
-          ];
-          cursor.skip = rows.length;
-          setHasNextPage(rows.length === PAGE_LIMIT);
-          setIsFetchingNextPage(false);
-          setResetToken((token) => token + 1);
-          return rows;
-        },
-        getKey: (commit) => commit.sha,
-        queryClient,
-      }),
-    );
-    return { collection, cursor };
-  }, [repoPath, queryClient]);
-
-  const collection = page?.collection ?? null;
-
-  const fetchNextPage = useCallback(() => {
-    if (page === null || repoPath === null || !hasNextPage || isFetchingNextPage) return;
-    const { collection, cursor } = page;
-    setIsFetchingNextPage(true);
-    void (async () => {
-      try {
-        const rows: CommitRow[] = [
-          ...(await window.git.listCommits({ repoPath, skip: cursor.skip, limit: PAGE_LIMIT })),
-        ];
-        collection.utils.writeUpsert(rows);
-        cursor.skip += rows.length;
-        setHasNextPage(rows.length === PAGE_LIMIT);
-      } catch {
-        // Leave `hasNextPage` untouched — a transient failure can be retried by scrolling again.
-      } finally {
-        setIsFetchingNextPage(false);
-      }
-    })();
-  }, [page, repoPath, hasNextPage, isFetchingNextPage]);
-
-  // A collection is an unordered key→value store keyed by `sha`, so a bare `q.from` iterates in the
-  // collection's internal (sha) order, *not* `git log`'s order — hence the explicit `orderBy`. We
-  // sort by `committedAt` desc to mirror `git log`, which orders by commit date (the row still shows
-  // the *authored* date, exactly as `git log`'s `Date:` line does). Topological ordering comes with
-  // the lanes slice; commit-date desc is the right approximation for this flat skeleton.
-  //
-  // `[collection]` is load-bearing: `useLiveQuery`'s builder form only recompiles when its deps
-  // array changes (default `[]` ⇒ compiled once, frozen onto the first collection). On a repo
-  // switch `useMemo` mints a *new* collection, so without this dep the live query keeps reading the
-  // previous repo's collection and the graph never updates. A branch switch keeps the same
-  // collection instance and refreshes via `invalidateQueries(commitsKey)` instead (see the branch
-  // mutations) — that path drives the collection's own QueryObserver, no recompile needed.
-  const { data, isLoading } = useLiveQuery(
+  // A collection is an unordered key→value store, so a bare `q.from` iterates in the collection's
+  // internal (key) order, *not* `git log`'s order — hence the explicit `orderBy`. We sort by
+  // `committedAt` desc to mirror `git log`, which orders by commit date (the row still shows the
+  // *authored* date, exactly as `git log`'s `Date:` line does). Topological ordering comes with
+  // the lanes slice. `''` is the "no Repository open" sentinel — it matches no rows and the
+  // `queryFn` fetches nothing for it. (The collection stays out of the deps — it's stable per
+  // QueryClient.)
+  const { data, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage } = useLivePaginatedQuery(
     (q) =>
-      collection
-        ? q.from({ commits: collection }).orderBy(({ commits }) => commits.committedAt, 'desc')
-        : undefined,
-    [collection],
+      q
+        .from({ commits: collection })
+        .where(({ commits }) => eq(commits.repoPath, repoPath ?? ''))
+        .orderBy(({ commits }) => commits.committedAt, 'desc'),
+    {
+      pageSize: PAGE_LIMIT,
+      fetchingKey: repoPath === null ? ['commits'] : commitsKey(repoPath),
+    },
+    [repoPath],
   );
 
-  // `useLiveQuery`'s own `isError` only reflects the live-query collection's own sync (always
-  // succeeds — it just relays the source); the underlying `listCommits` query's failure surfaces
-  // on the source collection's `utils.isError` instead (the query-db-collection glue, decisions §6/§8).
+  // The live query's own `isError` only reflects its own sync (always succeeds — it just relays
+  // the source); the underlying `listCommits` query's failure surfaces on the source collection's
+  // `utils.isError` instead (decisions §6/§8).
   return {
     data,
     isLoading,
-    isError: collection?.utils.isError ?? false,
-    hasNextPage: page === null ? false : hasNextPage,
+    isError: collection.utils.isError,
+    hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
-    resetToken,
   };
 }

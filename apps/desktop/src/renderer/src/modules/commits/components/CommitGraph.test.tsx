@@ -185,13 +185,30 @@ describe('CommitGraph states', () => {
   });
 
   it('shows an error message when the query rejects', async () => {
-    render(
-      <Wrapper
-        listCommitsMock={() => Promise.reject({ _tag: 'RepoNotFoundError', path: '/bad/path' })}
-      />,
-    );
-    expect(await screen.findByRole('alert')).toBeTruthy();
-    expect(screen.getByRole('alert').textContent).toMatch(/failed to load commits/i);
+    // When a subset query errors, @tanstack/db's on-demand sync layer leaks *derived* promise
+    // rejections (`.finally()` / argless `.catch()` chained off the subset's ready promise, in
+    // `collection/subscription.js` and `query/subset-dedupe.js` as of 0.6.x). The error itself IS
+    // handled — `utils.isError` flips and the alert renders, asserted below — so detach Vitest's
+    // unhandled-rejection accounting for this test only, and restore it after the leaked
+    // rejections have flushed.
+    const rejectionListeners = process.listeners('unhandledRejection');
+    process.removeAllListeners('unhandledRejection');
+    process.on('unhandledRejection', () => {});
+    try {
+      render(
+        <Wrapper
+          listCommitsMock={() => Promise.reject({ _tag: 'RepoNotFoundError', path: '/bad/path' })}
+        />,
+      );
+      expect(await screen.findByRole('alert')).toBeTruthy();
+      expect(screen.getByRole('alert').textContent).toMatch(/failed to load commits/i);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    } finally {
+      process.removeAllListeners('unhandledRejection');
+      for (const listener of rejectionListeners) {
+        process.on('unhandledRejection', listener);
+      }
+    }
   });
 });
 
@@ -333,27 +350,32 @@ describe('CommitGraph pagination', () => {
     expect(listCommitsMock).toHaveBeenCalledWith({ repoPath: '/repo', skip: 0, limit: PAGE_LIMIT });
   });
 
-  it('loads the next page (skip = loaded count) when scrolling nears the end, appends + dedups by sha, and halts once a short page arrives', async () => {
-    const page1 = makeCommitPage(PAGE_LIMIT, 0); // full page — "there may be more".
-    // Page 2 re-sends the last row of page 1 (`sha-299`) to prove dedup, then adds new rows, and is
-    // itself short — the real end of history.
-    const page2 = [page1[page1.length - 1] as Commit, ...makeCommitPage(20, 300)];
-    const listCommitsMock = vi.fn(({ skip }: ListCommitsArgs) =>
-      Promise.resolve((skip ?? 0) === 0 ? page1 : page2),
+  it('grows the loaded window when scrolling nears the end, dedups overlaps by sha, and halts once the window comes back short', async () => {
+    // 320 commits total: one full page, then a short remainder — the real end of history. The mock
+    // slices by `skip`/`limit` because the on-demand sync layer re-requests the *whole grown
+    // window* (`skip: 0, limit: 2 × PAGE_LIMIT`), not a delta page; overlapping rows reconcile by
+    // key.
+    const history = makeCommitPage(PAGE_LIMIT + 20, 0);
+    const listCommitsMock = vi.fn(({ skip = 0, limit }: ListCommitsArgs) =>
+      Promise.resolve(history.slice(skip, limit === undefined ? undefined : skip + limit)),
     );
     render(<Wrapper listCommitsMock={listCommitsMock} />);
     await screen.findByText('commit #0');
 
-    // Near (not at) the loaded end of page 1 — within `LOAD_MORE_THRESHOLD` rows of row 299.
+    // Near (not at) the loaded end of the first page — within `LOAD_MORE_THRESHOLD` rows of row 299.
     await scrollTo((PAGE_LIMIT - 10) * 32);
 
     expect(await screen.findByText('commit #300')).toBeTruthy();
     expect(listCommitsMock).toHaveBeenCalledWith({
       repoPath: '/repo',
-      skip: PAGE_LIMIT,
-      limit: PAGE_LIMIT,
+      skip: 0,
+      limit: 2 * PAGE_LIMIT,
     });
-    // `sha-299` was re-sent by page 2 — dedup by sha means it renders once, not twice.
+    // Loading more must keep the list mounted and the scroll offset intact — the live-query
+    // recompile used to flash empty, remounting the scroller at scrollTop 0.
+    const scroller = screen.getByRole('list', { name: 'Commits' }).parentElement;
+    expect(scroller?.scrollTop).toBe((PAGE_LIMIT - 10) * 32);
+    // Row 299 sat in both the first window and the grown one — reconciliation by sha renders it once.
     expect(screen.getAllByText('commit #299')).toHaveLength(1);
 
     // Scroll to the real end (320 total rows) to reveal the terminus row.
@@ -362,7 +384,7 @@ describe('CommitGraph pagination', () => {
 
     listCommitsMock.mockClear();
     await scrollTo(320 * 32);
-    // The end of history: no further requests once a page came back shorter than the limit.
+    // The end of history: no further requests once the window came back shorter than requested.
     expect(listCommitsMock).not.toHaveBeenCalled();
   });
 });
