@@ -4,7 +4,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
 // Renderer stack: TanStack Query (here) + Router + DB (wired with the first real routes/collections).
-const queryClient = new QueryClient();
+// `retry: false`: every query here wraps a local, deterministic git command — a failure (corrupt
+// repo, missing path) fails identically on every attempt, so TanStack Query's default 3-retry
+// backoff only delays the error state by ~7s. A module with a genuinely transient source can
+// still opt back in per-query.
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: false } },
+});
 
 /**
  * App-level infrastructure providers: the query cache, runtime theming, and the toast surface.
