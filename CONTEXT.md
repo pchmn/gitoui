@@ -45,6 +45,10 @@ _Avoid_: "log" (git plumbing — kept out of UI and domain code, like index/cach
 "revision history". The per-file commit list shown in the Code & Diff view is **File
 history** (always qualified) — never bare "History", which would collide with the graph.
 
+**Lane**:
+A vertical column of the Commit graph occupied by one line of history at a time — each Commit sits in a lane, and the edges to its parents run down lanes. A lane whose line has ended (merged away or bottomed out) can be reused further down by a different line; lanes are told apart by **position + lightness + ref label**, never hue alone.
+_Avoid_: "column" (the geometric slot; a lane is the occupancy), "track", "swimlane".
+
 **Branch**:
 A movable named pointer to a Commit. A *local branch* vs a *remote-tracking branch* (e.g. `origin/main`).
 _Avoid_: using "ref" when you specifically mean a branch.
