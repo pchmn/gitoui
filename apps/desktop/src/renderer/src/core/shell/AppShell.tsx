@@ -1,3 +1,4 @@
+import { CommitSelectionProvider } from '#renderer/modules/commits/CommitSelectionContext';
 import { CommitGraph } from '#renderer/modules/commits/components/CommitGraph';
 import { useActiveRepository } from '#renderer/modules/repository/ActiveRepositoryContext';
 import { EmptyState } from '#renderer/modules/repository/components/EmptyState';
@@ -23,17 +24,19 @@ export function AppShell() {
 
   return (
     <SelectionProvider>
-      <div className='flex h-screen flex-col bg-background text-foreground'>
-        <TopBar />
-        <div className='flex min-h-0 flex-1'>
-          {root !== null && <RepoRail />}
-          <main className='min-h-0 flex-1 overflow-auto'>
-            {root !== null ? <CommitGraph root={root} /> : isRestoring ? null : <EmptyState />}
-          </main>
-          {/* right inspector column slots here in a future slice */}
+      <CommitSelectionProvider>
+        <div className='flex h-screen flex-col bg-background text-foreground'>
+          <TopBar />
+          <div className='flex min-h-0 flex-1'>
+            {root !== null && <RepoRail />}
+            <main className='min-h-0 flex-1 overflow-auto'>
+              {root !== null ? <CommitGraph root={root} /> : isRestoring ? null : <EmptyState />}
+            </main>
+            {/* right inspector column slots here in a future slice */}
+          </div>
+          <StatusBar />
         </div>
-        <StatusBar />
-      </div>
+      </CommitSelectionProvider>
     </SelectionProvider>
   );
 }
