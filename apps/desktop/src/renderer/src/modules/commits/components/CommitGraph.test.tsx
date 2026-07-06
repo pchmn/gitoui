@@ -184,7 +184,7 @@ describe('CommitGraph states', () => {
     expect(await screen.findByText(/no commits yet/i)).toBeTruthy();
   });
 
-  it('shows an error message when the query rejects', async () => {
+  it('shows an inline error phrased via matchError when the query rejects, with no toast', async () => {
     // When a subset query errors, @tanstack/db's on-demand sync layer leaks *derived* promise
     // rejections (`.finally()` / argless `.catch()` chained off the subset's ready promise, in
     // `collection/subscription.js` and `query/subset-dedupe.js` as of 0.6.x). The error itself IS
@@ -201,8 +201,74 @@ describe('CommitGraph states', () => {
         />,
       );
       expect(await screen.findByRole('alert')).toBeTruthy();
-      expect(screen.getByRole('alert').textContent).toMatch(/failed to load commits/i);
+      // `matchError` picks the `RepoNotFoundError` arm, not the generic fallback.
+      expect(screen.getByRole('alert').textContent).toMatch(/repository not found: \/bad\/path/i);
+      // Inline, not a toast — no toast region renders alongside the error.
+      expect(screen.queryByRole('status')).toBeNull();
       await new Promise((resolve) => setTimeout(resolve, 0));
+    } finally {
+      process.removeAllListeners('unhandledRejection');
+      for (const listener of rejectionListeners) {
+        process.on('unhandledRejection', listener);
+      }
+    }
+  });
+
+  it('retries and shows the commits once the retried query succeeds', async () => {
+    const rejectionListeners = process.listeners('unhandledRejection');
+    process.removeAllListeners('unhandledRejection');
+    process.on('unhandledRejection', () => {});
+    try {
+      let hasFailed = false;
+      const listCommitsMock = vi.fn(() => {
+        if (!hasFailed) {
+          hasFailed = true;
+          return Promise.reject({ _tag: 'RepoNotFoundError', path: '/bad/path' });
+        }
+        return Promise.resolve([makeCommit({ subject: 'recovered commit' })]);
+      });
+      render(<Wrapper listCommitsMock={listCommitsMock} />);
+
+      const retryButton = await screen.findByRole('button', { name: /retry/i });
+      await act(async () => {
+        retryButton.click();
+      });
+
+      await screen.findByText('recovered commit');
+      expect(screen.queryByRole('alert')).toBeNull();
+    } finally {
+      process.removeAllListeners('unhandledRejection');
+      for (const listener of rejectionListeners) {
+        process.on('unhandledRejection', listener);
+      }
+    }
+  });
+
+  // The regression: a retry that succeeds against an *empty* history writes no rows, so no
+  // live-query change re-renders the component — only the hook's explicit post-retry re-read can
+  // swap the stale error UI for the empty state.
+  it('retries into an empty history and swaps the error for the empty state', async () => {
+    const rejectionListeners = process.listeners('unhandledRejection');
+    process.removeAllListeners('unhandledRejection');
+    process.on('unhandledRejection', () => {});
+    try {
+      let hasFailed = false;
+      const listCommitsMock = vi.fn(() => {
+        if (!hasFailed) {
+          hasFailed = true;
+          return Promise.reject({ _tag: 'RepoNotFoundError', path: '/bad/path' });
+        }
+        return Promise.resolve([]);
+      });
+      render(<Wrapper listCommitsMock={listCommitsMock} />);
+
+      const retryButton = await screen.findByRole('button', { name: /retry/i });
+      await act(async () => {
+        retryButton.click();
+      });
+
+      expect(await screen.findByText(/no commits yet/i)).toBeTruthy();
+      expect(screen.queryByRole('alert')).toBeNull();
     } finally {
       process.removeAllListeners('unhandledRejection');
       for (const listener of rejectionListeners) {

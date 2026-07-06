@@ -5,6 +5,7 @@ import type { Collection } from '@tanstack/react-db';
 import { createCollection, eq } from '@tanstack/react-db';
 import type { QueryClient } from '@tanstack/react-query';
 import { useQueryClient } from '@tanstack/react-query';
+import { useReducer } from 'react';
 import { useLivePaginatedQuery } from '#renderer/shared/hooks/useLivePaginatedQuery';
 
 /**
@@ -103,15 +104,26 @@ export function useCommits(repoPath: string | null): {
   data: CommitRow[] | undefined;
   isLoading: boolean;
   isError: boolean;
+  /** The error thrown by `listCommits` for the failing subset (undefined while not in error). */
+  error: unknown;
   /** `true` while the loaded window is full — history *may* extend past it. */
   hasNextPage: boolean;
   /** A page is in flight for the load-more path (not the initial/reset load — that's `isLoading`). */
   isFetchingNextPage: boolean;
   /** Grow the loaded window by one page. No-op while fetching or once history is exhausted. */
   fetchNextPage: () => void;
+  /** Clear the collection's error state and refetch — the error state's retry action. */
+  retry: () => void;
 } {
   const queryClient = useQueryClient();
   const collection = commitsCollection(queryClient);
+
+  // `utils.isError`/`utils.lastError` are plain mutable fields on the collection — nothing
+  // subscribes React to them. Reads below stay correct only because *something else* re-renders
+  // the component; a retry that settles without changing any row (success against an empty
+  // Repository, or failing again) emits no live-query change, so the error UI would sit stale
+  // forever. `rereadErrorState` is that missing subscription, bumped when a retry settles.
+  const [, rereadErrorState] = useReducer((epoch: number) => epoch + 1, 0);
 
   // A collection is an unordered key→value store, so a bare `q.from` iterates in the collection's
   // internal (key) order, *not* `git log`'s order — hence the explicit `orderBy`. We sort by
@@ -135,13 +147,27 @@ export function useCommits(repoPath: string | null): {
 
   // The live query's own `isError` only reflects its own sync (always succeeds — it just relays
   // the source); the underlying `listCommits` query's failure surfaces on the source collection's
-  // `utils.isError` instead (decisions §6/§8).
+  // `utils.isError`/`utils.lastError` instead (decisions §6/§8). `lastError` is TanStack Query's
+  // `QueryObserverResult.error`, i.e. whatever `listCommits` rejected with, untouched — so the
+  // typed `RepoNotFoundError` (or any other tagged error) survives for `matchError` upstream.
   return {
     data,
     isLoading,
     isError: collection.utils.isError,
+    error: collection.utils.lastError,
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
+    // `clearError` resets the collection's error state and refetches the failing subset — the
+    // retry action for the inline error state. Its rejection is swallowed (the re-read below shows
+    // the fresh `lastError` instead). The macrotask hop matters: TanStack Query notifies its
+    // observers through `notifyManager`'s microtask batches, so by `setTimeout 0` the collection's
+    // error state has settled either way — re-reading in `.finally` directly can race a failed
+    // retry and briefly render "no error, no rows" as the empty state.
+    retry: () =>
+      void collection.utils
+        .clearError()
+        .catch(() => {})
+        .finally(() => setTimeout(rereadErrorState, 0)),
   };
 }

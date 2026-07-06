@@ -3,7 +3,9 @@ import { IdentityAvatar } from '@gitoui/ui/identity-avatar';
 import { RefPill } from '@gitoui/ui/ref-pill';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useRef } from 'react';
+import type { GitError } from '#renderer/shared/git/errors';
 import { messages } from '#renderer/shared/messages/messages';
+import { matchError } from '#renderer/shared/utils/matchError';
 import { formatRelativeTime } from '#renderer/shared/utils/relativeTime';
 import { useCommits } from '../hooks/useCommits';
 
@@ -22,18 +24,21 @@ const LOAD_MORE_THRESHOLD = 20;
  * the author's circular avatar + name + a relative date. No row selection — that lands with the
  * lanes slice.
  *
- * Mirrors `BranchesSection`'s loading/error/empty states: skeleton rows on pending, a quiet
- * `role="alert"` inline message via `matchError` on error, an empty hint when the Repository has
- * no commits.
+ * Mirrors `BranchesSection`'s loading/error/empty states, adapted to the center column: skeleton
+ * rows on pending (no spinner), a centered "No commits yet" empty state, and — since the primary
+ * content here is what failed, not an out-of-band event — a centered inline `role="alert"` message
+ * via `matchError` with a retry, never a toast.
  */
 export function CommitGraph({ root }: { root: string }) {
   const {
     data: commits,
     isLoading,
     isError,
+    error,
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
+    retry,
   } = useCommits(root);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -77,20 +82,35 @@ export function CommitGraph({ root }: { root: string }) {
     return <CommitGraphSkeleton />;
   }
 
-  // Error state — quiet inline message. The collection surfaces the underlying `unknown` error,
-  // so this stays a generic message rather than a `matchError` narrowing (TanStack DB wraps the
-  // thrown error rather than passing it through verbatim).
+  // Error state — inline (not a toast: the primary content here IS what failed, so the user is
+  // already looking at it) and centered, with the typed error phrased via `matchError` and a retry
+  // that clears the collection's error state and re-fetches the failing subset.
   if (isError) {
+    const message = matchError<GitError<'listCommits'>, string>(error, {
+      RepoNotFoundError: (e) => messages.commitGraph.repoNotFound(e.path),
+      _: () => messages.commitGraph.failedToLoad,
+    });
     return (
-      <p className='px-3 py-2 text-xs text-muted-foreground' role='alert'>
-        {messages.commitGraph.failedToLoad}
-      </p>
+      <div className='flex h-full flex-col items-center justify-center gap-2 px-3 py-2 text-center'>
+        <p className='text-xs text-muted-foreground' role='alert'>
+          {message}
+        </p>
+        <button
+          type='button'
+          onClick={retry}
+          className='rounded-sm border border-border px-2 py-1 text-xs text-foreground hover:bg-muted'
+        >
+          {messages.commitGraph.retry}
+        </button>
+      </div>
     );
   }
 
   if (!commits || commits.length === 0) {
     return (
-      <p className='px-3 py-2 text-xs text-muted-foreground'>{messages.commitGraph.emptyYet}</p>
+      <div className='flex h-full items-center justify-center px-3 py-2 text-center'>
+        <p className='text-xs text-muted-foreground'>{messages.commitGraph.emptyYet}</p>
+      </div>
     );
   }
 

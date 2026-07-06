@@ -73,6 +73,7 @@ export const messages = {
     emptyYet: 'No commits yet.',
     loadingMore: 'Loading more commits…',
     endOfHistory: 'End of history',
+    retry: 'Retry',
   },
   branchSelector: {
     filterPlaceholder: 'Filter branches…',
