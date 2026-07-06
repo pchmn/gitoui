@@ -174,8 +174,11 @@ saturation reserved for actions, state, and the graph.
 ### Tertiary — Graph Lanes
 - **Lane 1–5** (`oklch(0.65 0.066 50.6)` … `oklch(0.50 0.066 290.6)`): the commit graph's branch
   lanes, hue-rotated +0/+60/+120/+180/+240 from the source with stepped lightness. Their chroma
-  follows the source, so a calm source yields calm lanes. Lanes are distinguished by **lightness +
-  position + ref label**, not hue alone.
+  follows the source — but never below a **floor of 0.05** (`max(c, 0.05)`), so a calm source yields
+  calm lanes while a grey source still yields five distinguishable ones. The lightness steps are
+  deliberately non-monotonic (0.65/0.55/0.45/0.60/0.50) so any two *adjacent* lanes differ by ≥0.10,
+  including at the `col % 5` wrap. Lanes are distinguished by **lightness + position + ref label**,
+  not hue alone. Runtime tokens are `--lane-1…5` (the shadcn `--chart-*` set is not the graph's).
 
 ### Semantic
 - **Alert** (`oklch(0.577 0.245 27.325)`): the one fixed, source-independent color — destructive

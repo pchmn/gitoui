@@ -432,24 +432,33 @@ export class GitClient extends Effect.Service<GitClient>()('@gitoui/core/GitClie
       }).pipe(Effect.catchTag('GitProcessError', () => new RepoNotFoundError({ path: repoPath }))),
 
     /**
-     * Walk the current Branch's history from HEAD (issue #42 — the commit graph's walking
-     * skeleton). `skip`/`limit` default to `0`/`300`. An empty Repository (unborn HEAD) makes
-     * `git log HEAD` exit non-zero — git phrases this either as "does not have any commits yet"
-     * (bare `git log`) or "unknown revision or path not in the working tree" (an explicit but
-     * unborn `HEAD`, which is what we pass) — both caught and mapped to `[]`, NOT an error; every
+     * Walk history (issue #42 — the commit graph's walking skeleton; issue #54 — the `allRefs`
+     * scope). `skip`/`limit` default to `0`/`300`. `scope` defaults to `'head'`: `git log HEAD`,
+     * date order — today's behavior, untouched. `scope: 'allRefs'` walks
+     * `HEAD --branches --remotes --tags` instead of `--all` (which would drag in
+     * `refs/stash`/`refs/notes` — not Refs in the glossary, CONTEXT.md) and adds `--topo-order`,
+     * implied by the scope rather than a separate option: the lane sweep (ADR 0007) requires
+     * strict children-before-parents order, which date order doesn't guarantee under clock skew.
+     * The walk stays fully local either way — remote-tracking branches are local pointers to
+     * already-fetched objects, no network. An empty Repository (unborn HEAD) makes `git log`
+     * exit non-zero — git phrases this either as "does not have any commits yet" (bare `git log`)
+     * or "unknown revision or path not in the working tree" (an explicit but unborn `HEAD`, which
+     * is what we pass) — both caught and mapped to `[]`, NOT an error, for both scopes; every
      * other failure still maps to `RepoNotFoundError`, same as the other list* methods.
      */
     listCommits: (
       repoPath: string,
       skip?: number,
       limit?: number,
+      scope?: 'head' | 'allRefs',
     ): Effect.Effect<Commit[], RepoNotFoundError> =>
       withGit(repoPath, async (git) => {
         const out = await git.raw([
           'log',
-          'HEAD',
+          ...(scope === 'allRefs' ? ['HEAD', '--branches', '--remotes', '--tags'] : ['HEAD']),
           `--skip=${skip ?? 0}`,
           `--max-count=${limit ?? 300}`,
+          ...(scope === 'allRefs' ? ['--topo-order'] : []),
           // Full ref paths in %D — the only way to tell a local Branch `feature/x` from a
           // remote-tracking `origin/main` (see parseRefDecoration).
           '--decorate=full',

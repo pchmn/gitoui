@@ -441,7 +441,12 @@ describe('CommitGraph pagination', () => {
     render(<Wrapper listCommitsMock={listCommitsMock} />);
 
     await screen.findByText('feat: add engine');
-    expect(listCommitsMock).toHaveBeenCalledWith({ repoPath: '/repo', skip: 0, limit: PAGE_LIMIT });
+    expect(listCommitsMock).toHaveBeenCalledWith({
+      repoPath: '/repo',
+      skip: 0,
+      limit: PAGE_LIMIT,
+      scope: 'allRefs',
+    });
   });
 
   it('grows the loaded window when scrolling nears the end, dedups overlaps by sha, and halts once the window comes back short', async () => {
@@ -464,6 +469,7 @@ describe('CommitGraph pagination', () => {
       repoPath: '/repo',
       skip: 0,
       limit: 2 * PAGE_LIMIT,
+      scope: 'allRefs',
     });
     // Loading more must keep the list mounted and the scroll offset intact — the live-query
     // recompile used to flash empty, remounting the scroller at scrollTop 0.
