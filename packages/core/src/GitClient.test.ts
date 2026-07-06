@@ -757,6 +757,14 @@ describe('GitClient.listCommits', () => {
     g(repo, 'add', 'b.txt');
     g(repo, 'commit', '-m', 'second commit');
 
+    // A sibling branch diverged from `init`, unreachable from HEAD (`main`) — exercises the
+    // `allRefs` scope (issue #54).
+    g(repo, 'checkout', '-b', 'sibling', 'HEAD~1');
+    writeFileSync(join(repo, 'c.txt'), 'c');
+    g(repo, 'add', 'c.txt');
+    g(repo, 'commit', '-m', 'sibling commit');
+    g(repo, 'checkout', 'main');
+
     execFileSync('git', ['init', '-q', '-b', 'main', emptyRepo], { cwd: base });
     execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: emptyRepo });
     execFileSync('git', ['config', 'user.name', 'Test'], { cwd: emptyRepo });
@@ -774,6 +782,41 @@ describe('GitClient.listCommits', () => {
       // --decorate=full end-to-end: the tip carries the checked-out `main`; older commits carry nothing.
       expect(commits[0]?.refs).toEqual([{ _tag: 'Branch', name: 'main', current: true }]);
       expect(commits[1]?.refs).toEqual([]);
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect("default scope (head) does not include a sibling branch's commits", () =>
+    Effect.gen(function* () {
+      const client = yield* GitClient;
+      const commits = yield* client.listCommits(repo);
+      expect(commits.some((c) => c.subject === 'sibling commit')).toBe(false);
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('scope: allRefs includes commits unreachable from HEAD', () =>
+    Effect.gen(function* () {
+      const client = yield* GitClient;
+      const commits = yield* client.listCommits(repo, undefined, undefined, 'allRefs');
+      const subjects = commits.map((c) => c.subject);
+      expect(subjects).toContain('sibling commit');
+      expect(subjects).toContain('second commit');
+      expect(subjects).toContain('init');
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('scope: allRefs orders every commit before its parents (topo invariant)', () =>
+    Effect.gen(function* () {
+      const client = yield* GitClient;
+      const commits = yield* client.listCommits(repo, undefined, undefined, 'allRefs');
+      const indexBySha = new Map(commits.map((c, i) => [c.sha, i]));
+      for (const commit of commits) {
+        for (const parentSha of commit.parents) {
+          const parentIndex = indexBySha.get(parentSha);
+          if (parentIndex !== undefined) {
+            expect(indexBySha.get(commit.sha)).toBeLessThan(parentIndex);
+          }
+        }
+      }
     }).pipe(Effect.provide(GitClient.Default)),
   );
 

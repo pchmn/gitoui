@@ -182,6 +182,12 @@ export const ListCommitsInput = Schema.Struct({
   repoPath: Schema.String,
   skip: Schema.optional(Schema.Number),
   limit: Schema.optional(Schema.Number),
+  /**
+   * Which Refs to walk. Absent or `'head'` — today's behavior, HEAD only, date order. `'allRefs'`
+   * — `HEAD --branches --remotes --tags`, `--topo-order` (ADR 0007). A closed literal, not a
+   * free-form ref list — the renderer never constructs raw git rev arguments.
+   */
+  scope: Schema.optional(Schema.Literal('head', 'allRefs')),
 });
 export type ListCommitsInput = typeof ListCommitsInput.Type;
 

@@ -78,7 +78,9 @@ export function registerIpc(): void {
 
   makeIpcMethod(CHANNELS.git.listCommits, gitContract.listCommits, (payload) =>
     GitClient.pipe(
-      Effect.flatMap((git) => git.listCommits(payload.repoPath, payload.skip, payload.limit)),
+      Effect.flatMap((git) =>
+        git.listCommits(payload.repoPath, payload.skip, payload.limit, payload.scope),
+      ),
       Effect.provide(GitClient.Default),
     ),
   );

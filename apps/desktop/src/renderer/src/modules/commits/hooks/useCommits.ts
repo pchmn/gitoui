@@ -79,6 +79,9 @@ function commitsCollection(queryClient: QueryClient): CommitsCollection {
           repoPath,
           skip: opts?.offset ?? 0,
           limit: limit ?? PAGE_LIMIT,
+          // The graph shows the whole repo, not just HEAD's ancestry — every Branch,
+          // remote-tracking branch, and Tag (issue #54).
+          scope: 'allRefs',
         });
         return commits.map((commit) => ({ ...commit, repoPath }));
       },
