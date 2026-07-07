@@ -324,8 +324,9 @@ persisted across sessions. Min/max keep either side from crowding out the graph.
 ### Navigation
 - **Top bar:** a 44px (`h-11`) frameless drag region with the repository + branch selectors on the
   left and Fetch / Pull / Push on the right (Push = primary, with an ahead-count badge). A search
-  affordance and the appearance/theme toggles sit at the far right as ghost icon buttons. Honors
-  Electron drag regions (`drag-region` / `no-drag`); interactive children opt back out with `no-drag`.
+  affordance and a Settings gear sit at the far right as ghost icon buttons — no inline theme
+  toggles; appearance lives in Settings. Honors Electron drag regions (`drag-region` / `no-drag`);
+  interactive children opt back out with `no-drag`.
 - **Side rail:** Surface-tinted, collapsible sections (Branches, Remotes, Tags, Stashes) as dense
   Label-size rows, with a filter field at the top.
 - **Tabs** (e.g. Changes / Tree, Diff / File, Unified / Split): underline or tinted-fill active
