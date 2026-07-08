@@ -35,6 +35,9 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  /* Semantic addition/success color (DESIGN.md §Colors → Semantic): fixed, source-independent,
+     paired with `--destructive` for diff/Changes-row stats (`+N` green, `-N` red). */
+  --color-success: var(--success);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -84,6 +87,9 @@
   --accent: oklch(from var(--primary-source) 0.93 calc(c * 0.3) h);
   --accent-foreground: oklch(from var(--primary-source) 0.25 calc(c * 0.4) h);
   --destructive: oklch(0.577 0.245 27.325);
+  /* Success / addition (DESIGN.md §Colors → Semantic): reuses the conflict-red's lightness with a
+     matching green hue, fixed and source-independent like `--destructive`. */
+  --success: oklch(0.577 0.19 142.5);
   --border: oklch(from var(--primary-source) 0.9 calc(c * 0.25) h);
   --input: oklch(from var(--primary-source) 0.92 calc(c * 0.2) h);
   --ring: oklch(from var(--primary-source) min(l, 0.55) c h);
@@ -128,6 +134,7 @@
   --accent: oklch(from var(--primary-source) 0.3 calc(c * 0.3) h);
   --accent-foreground: oklch(from var(--primary-source) 0.94 calc(c * 0.15) h);
   --destructive: oklch(0.704 0.191 22.216);
+  --success: oklch(0.704 0.17 142.5);
   --border: oklch(from var(--primary-source) 1 calc(c * 0.1) h / 10%);
   --input: oklch(from var(--primary-source) 1 calc(c * 0.1) h / 15%);
   --ring: oklch(from var(--primary-source) max(l, 0.72) c h);

@@ -85,8 +85,10 @@ describe('RepoRail resize', () => {
     render(<Wrapper root='/repo/my-project' />);
     await screen.findByText('Branches');
 
-    const separator = screen.getByRole('separator');
-    const rail = separator.closest('aside') as HTMLElement;
+    // The Inspector (issue #61) also renders a `role="separator"` handle on its own <aside> —
+    // scope to the rail (the one containing "Branches") so this test targets its own separator.
+    const rail = (await screen.findByText('Branches')).closest('aside') as HTMLElement;
+    const separator = within(rail).getByRole('separator');
     expect(rail.style.width).toBe('256px'); // default
 
     // ArrowLeft on a left-side rail shrinks it by 8px; the width persists to localStorage.
@@ -106,8 +108,7 @@ describe('RepoRail resize', () => {
   it('restores a previously persisted width on mount', async () => {
     localStorage.setItem('gitoui:rail-width', '320');
     render(<Wrapper root='/repo/my-project' />);
-    await screen.findByText('Branches');
-    const rail = screen.getByRole('separator').closest('aside') as HTMLElement;
+    const rail = (await screen.findByText('Branches')).closest('aside') as HTMLElement;
     expect(rail.style.width).toBe('320px');
   });
 });
