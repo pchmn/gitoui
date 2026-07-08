@@ -9,7 +9,9 @@ import {
   GitClient,
   parseCommitLog,
   parseForEachRef,
+  parseNumstat,
   parseOverwriteError,
+  parsePorcelainV2,
   parseRefDecoration,
   parseRemoteTrackingRefs,
   parseStashList,
@@ -841,6 +843,252 @@ describe('GitClient.listCommits', () => {
     Effect.gen(function* () {
       const client = yield* GitClient;
       const error = yield* Effect.flip(client.listCommits(join(base, 'does-not-exist')));
+      expect(error._tag).toBe('RepoNotFoundError');
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+});
+
+// --- parsePorcelainV2 unit tests (pure, pinned output) ---
+
+describe('parsePorcelainV2', () => {
+  // Pinned `git status --porcelain=v2 --branch -z` output: NUL-terminated records. Covers the
+  // header block, both-axes (MM), staged-only add (A.) with a spaced path, unstaged delete (.D),
+  // a rename (type-2, oldPath in the following token), and an untracked entry.
+  const PINNED =
+    [
+      '# branch.oid 1111111111111111111111111111111111111111',
+      '# branch.head main',
+      '# branch.upstream origin/main',
+      '# branch.ab +1 -2',
+      '1 MM N... 100644 100644 100644 aaaaaaa bbbbbbb a.txt',
+      '1 A. N... 000000 100644 100644 0000000 ccccccc added file.txt',
+      '1 .D N... 100644 100644 000000 ddddddd ddddddd gone.txt',
+      '2 R. N... 100644 100644 100644 eeeeeee eeeeeee R100 new name.txt',
+      'old name.txt',
+      '? untracked.txt',
+    ].join('\0') + '\0';
+
+  it('parses the branch header and ahead/behind', () => {
+    const { branch, ahead, behind } = parsePorcelainV2(PINNED);
+    expect(branch).toBe('main');
+    expect(ahead).toBe(1);
+    expect(behind).toBe(2);
+  });
+
+  it('parses a both-axes (MM) entry onto staged AND unstaged', () => {
+    const { entries } = parsePorcelainV2(PINNED);
+    const a = entries.find((e) => e.path === 'a.txt');
+    expect(a?.staged).toEqual({ kind: 'modified' });
+    expect(a?.unstaged).toEqual({ kind: 'modified' });
+  });
+
+  it('parses a staged-only add and preserves a path with spaces', () => {
+    const { entries } = parsePorcelainV2(PINNED);
+    const added = entries.find((e) => e.path === 'added file.txt');
+    expect(added?.staged).toEqual({ kind: 'added' });
+    expect(added?.unstaged).toBeUndefined();
+  });
+
+  it('parses an unstaged-only delete', () => {
+    const { entries } = parsePorcelainV2(PINNED);
+    const gone = entries.find((e) => e.path === 'gone.txt');
+    expect(gone?.staged).toBeUndefined();
+    expect(gone?.unstaged).toEqual({ kind: 'deleted' });
+  });
+
+  it('parses a rename (type 2) with oldPath from the following token', () => {
+    const { entries } = parsePorcelainV2(PINNED);
+    const renamed = entries.find((e) => e.path === 'new name.txt');
+    expect(renamed?.staged).toEqual({ kind: 'renamed' });
+    expect(renamed?.oldPath).toBe('old name.txt');
+  });
+
+  it('parses an untracked entry onto the unstaged axis', () => {
+    const { entries } = parsePorcelainV2(PINNED);
+    const untracked = entries.find((e) => e.path === 'untracked.txt');
+    expect(untracked?.staged).toBeUndefined();
+    expect(untracked?.unstaged).toEqual({ kind: 'untracked' });
+  });
+
+  it('keeps the HEAD placeholder for a detached head (no ahead/behind)', () => {
+    const detached = ['# branch.oid abc', '# branch.head (detached)'].join('\0') + '\0';
+    const { branch, ahead, behind, entries } = parsePorcelainV2(detached);
+    expect(branch).toBe('HEAD');
+    expect(ahead).toBe(0);
+    expect(behind).toBe(0);
+    expect(entries).toEqual([]);
+  });
+
+  it('maps a conflicted (u) record to modified on both axes (out of scope for now)', () => {
+    const conflicted = 'u UU N... 100644 100644 100644 100644 h1 h2 h3 conflict.txt\0';
+    const { entries } = parsePorcelainV2(conflicted);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toEqual({
+      path: 'conflict.txt',
+      staged: { kind: 'modified' },
+      unstaged: { kind: 'modified' },
+    });
+  });
+
+  it('returns an empty entry list for a clean repo', () => {
+    const clean = ['# branch.oid abc', '# branch.head main'].join('\0') + '\0';
+    expect(parsePorcelainV2(clean).entries).toEqual([]);
+  });
+});
+
+// --- parseNumstat unit tests (pure, pinned output) ---
+
+describe('parseNumstat', () => {
+  it('parses normal add/delete counts keyed by path', () => {
+    const stats = parseNumstat('5\t3\tsrc/a.txt\0');
+    expect(stats.get('src/a.txt')).toEqual({ additions: 5, deletions: 3 });
+  });
+
+  it('omits both counts for a binary file (`- -`)', () => {
+    const stats = parseNumstat('-\t-\timage.png\0');
+    expect(stats.get('image.png')).toEqual({});
+  });
+
+  it('keys a rename on the NEW path (old path absent)', () => {
+    const stats = parseNumstat('2\t1\t\0old.txt\0new.txt\0');
+    expect(stats.has('old.txt')).toBe(false);
+    expect(stats.get('new.txt')).toEqual({ additions: 2, deletions: 1 });
+  });
+
+  it('handles a path containing spaces', () => {
+    const stats = parseNumstat('1\t0\tmy file.txt\0');
+    expect(stats.get('my file.txt')).toEqual({ additions: 1, deletions: 0 });
+  });
+
+  it('parses multiple mixed records', () => {
+    const stats = parseNumstat('1\t2\ta.txt\0-\t-\tb.bin\0');
+    expect(stats.get('a.txt')).toEqual({ additions: 1, deletions: 2 });
+    expect(stats.get('b.bin')).toEqual({});
+  });
+
+  it('returns an empty map for empty output', () => {
+    expect(parseNumstat('').size).toBe(0);
+  });
+});
+
+// --- GitClient.status integration tests ---
+
+describe('GitClient.status', () => {
+  let base: string;
+  /** A repo with a dirty working tree exercising every axis/kind. */
+  let dirty: string;
+  /** A repo with a clean working tree. */
+  let clean: string;
+
+  const g = (cwd: string, ...args: string[]) =>
+    execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+
+  beforeAll(() => {
+    base = realpathSync(mkdtempSync(join(tmpdir(), 'gitoui-status-')));
+    dirty = join(base, 'dirty');
+    clean = join(base, 'clean');
+    mkdirSync(dirty, { recursive: true });
+    mkdirSync(clean, { recursive: true });
+
+    for (const repo of [dirty, clean]) {
+      execFileSync('git', ['init', '-q', '-b', 'main', repo], { cwd: base });
+      execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: repo });
+      execFileSync('git', ['config', 'user.name', 'Test'], { cwd: repo });
+      // Make rename detection deterministic regardless of the host git's global config.
+      execFileSync('git', ['config', 'status.renames', 'true'], { cwd: repo });
+    }
+
+    // clean: a single committed file, no working-tree changes.
+    writeFileSync(join(clean, 'a.txt'), 'a\n');
+    g(clean, 'add', 'a.txt');
+    g(clean, 'commit', '-m', 'init');
+
+    // dirty: commit a text file, a to-be-renamed file, and a binary file.
+    writeFileSync(join(dirty, 'a.txt'), 'line1\n');
+    writeFileSync(join(dirty, 'rename-me.txt'), 'content\n');
+    writeFileSync(join(dirty, 'binary.bin'), Buffer.from([0, 1, 2, 3]));
+    g(dirty, 'add', '-A');
+    g(dirty, 'commit', '-m', 'init');
+
+    // Ground-truth two-axis case: stage a +2-line edit, then re-edit the work tree by +1 line.
+    writeFileSync(join(dirty, 'a.txt'), 'line1\ns1\ns2\n');
+    g(dirty, 'add', 'a.txt');
+    writeFileSync(join(dirty, 'a.txt'), 'line1\ns1\ns2\nu1\n');
+
+    // Staged rename (git mv stages it).
+    g(dirty, 'mv', 'rename-me.txt', 'renamed.txt');
+
+    // Staged binary modification — appears in numstat as `- -`, so no line stats.
+    writeFileSync(join(dirty, 'binary.bin'), Buffer.from([0, 1, 2, 3, 4, 5]));
+    g(dirty, 'add', 'binary.bin');
+
+    // Untracked file — never staged.
+    writeFileSync(join(dirty, 'untracked.txt'), 'new\n');
+  });
+
+  afterAll(() => rmSync(base, { recursive: true, force: true }));
+
+  it.effect('reports a staged-then-re-edited path on both axes with distinct per-axis stats', () =>
+    Effect.gen(function* () {
+      const client = yield* GitClient;
+      const { entries } = yield* client.status(dirty);
+      const a = entries.find((e) => e.path === 'a.txt');
+      expect(a).toBeDefined();
+      // Staged stats reflect the first edit (+2); unstaged stats the second (+1) — different diffs.
+      expect(a?.staged).toEqual({ kind: 'modified', additions: 2, deletions: 0 });
+      expect(a?.unstaged).toEqual({ kind: 'modified', additions: 1, deletions: 0 });
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('reports an untracked file on the unstaged axis with no stats', () =>
+    Effect.gen(function* () {
+      const client = yield* GitClient;
+      const { entries } = yield* client.status(dirty);
+      const untracked = entries.find((e) => e.path === 'untracked.txt');
+      expect(untracked?.staged).toBeUndefined();
+      expect(untracked?.unstaged).toEqual({ kind: 'untracked' });
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('reports a binary modification with a kind but no line stats', () =>
+    Effect.gen(function* () {
+      const client = yield* GitClient;
+      const { entries } = yield* client.status(dirty);
+      const binary = entries.find((e) => e.path === 'binary.bin');
+      expect(binary?.staged?.kind).toBe('modified');
+      expect(binary?.staged?.additions).toBeUndefined();
+      expect(binary?.staged?.deletions).toBeUndefined();
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('reports a rename with oldPath set to the pre-rename path', () =>
+    Effect.gen(function* () {
+      const client = yield* GitClient;
+      const { entries } = yield* client.status(dirty);
+      const renamed = entries.find((e) => e.path === 'renamed.txt');
+      expect(renamed).toBeDefined();
+      expect(renamed?.oldPath).toBe('rename-me.txt');
+      expect(renamed?.staged?.kind).toBe('renamed');
+      // The old path is folded into the rename entry, not surfaced as its own entry.
+      expect(entries.some((e) => e.path === 'rename-me.txt')).toBe(false);
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('reports a clean repo as no entries with the current branch', () =>
+    Effect.gen(function* () {
+      const client = yield* GitClient;
+      const status = yield* client.status(clean);
+      expect(status.entries).toEqual([]);
+      expect(status.branch).toBe('main');
+      expect(status.ahead).toBe(0);
+      expect(status.behind).toBe(0);
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('fails with RepoNotFoundError for a bad path', () =>
+    Effect.gen(function* () {
+      const client = yield* GitClient;
+      const error = yield* Effect.flip(client.status(join(base, 'does-not-exist')));
       expect(error._tag).toBe('RepoNotFoundError');
     }).pipe(Effect.provide(GitClient.Default)),
   );

@@ -1,6 +1,7 @@
 import type {
   Branch,
   BranchList,
+  ChangeKind,
   Commit,
   Ref,
   Remote,
@@ -9,6 +10,8 @@ import type {
   Stash,
   StashList,
   Status,
+  StatusChange,
+  StatusEntry,
   TagList,
 } from '@gitoui/contracts/git';
 import {
@@ -251,9 +254,205 @@ export function parseCommitLog(raw: string): Commit[] {
 }
 
 /**
+ * Map a single porcelain=v2 status letter (the X or Y of an `<XY>` field) to a `ChangeKind`.
+ * `T` (type change, e.g. file → symlink) and `U` (unmerged) both fold into `modified` — the domain
+ * has no dedicated kind for them yet, and Conflicted (`u` records) is out of scope for this epic
+ * (see issue #60 / CONTEXT.md). `C` (copy) surfaces the new path as `added`.
+ */
+function mapStatusCode(code: string): ChangeKind {
+  switch (code) {
+    case 'A':
+      return 'added';
+    case 'D':
+      return 'deleted';
+    case 'R':
+      return 'renamed';
+    case 'C':
+      return 'added';
+    default:
+      // M, T, U, and any unexpected letter — treat as a modification.
+      return 'modified';
+  }
+}
+
+/**
+ * Parse `git status --porcelain=v2 --branch -z` into the current branch, ahead/behind counts, and
+ * the two-axis `StatusEntry` list (WITHOUT numstat stats — those are merged in by the caller).
+ *
+ * Records are NUL-terminated (`-z`); split on `\0` and scan, because a rename record (`2 …`) spans
+ * TWO tokens — the record itself, then a second NUL-terminated token holding the original path
+ * (`-z` swaps the usual TAB path-separator for a NUL). Header records (`# …`) carry the branch /
+ * ahead-behind. Per-file records:
+ *
+ * - `1 <XY> …  <path>`                — ordinary change. X ≠ `.` → staged axis; Y ≠ `.` → unstaged.
+ * - `2 <XY> … <Xscore> <path>` + path — rename/copy. Same XY axes; the next token is `oldPath`.
+ * - `? <path>`                        — untracked → `unstaged: { kind: 'untracked' }`.
+ * - `u <XY> … <path>`                 — unmerged/Conflicted. Out of scope: both axes → `modified`.
+ * - `! <path>`                        — ignored; skipped (only emitted with `--ignored`).
+ *
+ * With `-z` git does NOT quote paths, so a path may contain spaces — everything after the fixed
+ * leading fields is the path (`slice(n).join(' ')`), never a naive `split(' ')[n]`.
+ *
+ * Pure function — no IO — so it can be unit-tested against pinned output without spawning git.
+ */
+export function parsePorcelainV2(stdout: string): {
+  branch: string;
+  ahead: number;
+  behind: number;
+  entries: StatusEntry[];
+} {
+  let branch = 'HEAD';
+  let ahead = 0;
+  let behind = 0;
+  const entries: StatusEntry[] = [];
+
+  const tokens = stdout.split('\0');
+  let i = 0;
+  while (i < tokens.length) {
+    const token = tokens[i] ?? '';
+    if (token.length === 0) {
+      i += 1;
+      continue;
+    }
+
+    if (token.startsWith('# ')) {
+      if (token.startsWith('# branch.head ')) {
+        const head = token.slice('# branch.head '.length);
+        // `(detached)` isn't a branch — keep the prior `HEAD` placeholder (branch isn't the point
+        // of this method; the graph owns Detached-HEAD rendering).
+        if (head !== '(detached)') branch = head;
+      } else if (token.startsWith('# branch.ab ')) {
+        // `+<ahead> -<behind>` — only present when an upstream is configured.
+        const match = token.match(/\+(\d+) -(\d+)/);
+        ahead = Number(match?.[1] ?? 0);
+        behind = Number(match?.[2] ?? 0);
+      }
+      i += 1;
+      continue;
+    }
+
+    const type = token[0];
+    const fields = token.split(' ');
+
+    if (type === '1' || type === '2') {
+      const xy = fields[1] ?? '..';
+      const x = xy[0] ?? '.';
+      const y = xy[1] ?? '.';
+      // Ordinary records carry the path from field 8; rename/copy records add an `<Xscore>` field,
+      // pushing the path to field 9.
+      const path = fields.slice(type === '1' ? 8 : 9).join(' ');
+      // Mutable while we fill the axes; `StatusEntry`'s own fields are readonly (schema-derived).
+      const entry: {
+        path: string;
+        oldPath?: string;
+        staged?: StatusChange;
+        unstaged?: StatusChange;
+      } = { path };
+      if (x !== '.') entry.staged = { kind: mapStatusCode(x) };
+      if (y !== '.') entry.unstaged = { kind: mapStatusCode(y) };
+      if (type === '2') {
+        // The original path is the following NUL-terminated token.
+        entry.oldPath = tokens[i + 1] ?? '';
+        i += 2;
+      } else {
+        i += 1;
+      }
+      entries.push(entry);
+      continue;
+    }
+
+    if (type === '?') {
+      entries.push({ path: token.slice(2), unstaged: { kind: 'untracked' } });
+      i += 1;
+      continue;
+    }
+
+    if (type === 'u') {
+      // Conflicted — out of scope for this epic (issue #60). Surface it as a change on both axes so
+      // the count is honest, mapping both to `modified` until real conflict handling lands.
+      const path = fields.slice(10).join(' ');
+      entries.push({ path, staged: { kind: 'modified' }, unstaged: { kind: 'modified' } });
+      i += 1;
+      continue;
+    }
+
+    // `!` ignored records (only with --ignored) and anything unexpected — skip.
+    i += 1;
+  }
+
+  return { branch, ahead, behind, entries };
+}
+
+/**
+ * Parse `git diff --numstat -z` (or `--cached`) into a `path → { additions?, deletions? }` map.
+ *
+ * Each record is `additions\tdeletions\t<path>\0`. Two seams: binary files print `-\t-` → both
+ * counts OMITTED (kept optional in the schema); renames print `additions\tdeletions\t\0old\0new\0`,
+ * i.e. an empty path slot followed by two extra NUL tokens — keyed on the NEW path (`git status`
+ * reports the entry under its new path, so this merges cleanly).
+ *
+ * Pure function — no IO — so it can be unit-tested against pinned output without spawning git.
+ */
+export function parseNumstat(
+  stdout: string,
+): Map<string, { additions?: number; deletions?: number }> {
+  const stats = new Map<string, { additions?: number; deletions?: number }>();
+
+  const tokens = stdout.split('\0');
+  let i = 0;
+  while (i < tokens.length) {
+    const token = tokens[i] ?? '';
+    if (token.length === 0) {
+      i += 1;
+      continue;
+    }
+
+    const firstTab = token.indexOf('\t');
+    const secondTab = token.indexOf('\t', firstTab + 1);
+    if (firstTab === -1 || secondTab === -1) {
+      // Malformed — skip defensively.
+      i += 1;
+      continue;
+    }
+
+    const addStr = token.slice(0, firstTab);
+    const delStr = token.slice(firstTab + 1, secondTab);
+    const rest = token.slice(secondTab + 1);
+
+    let path: string;
+    if (rest.length === 0) {
+      // Rename/copy: the two following NUL tokens are old, then new. Key on the new path.
+      path = tokens[i + 2] ?? '';
+      i += 3;
+    } else {
+      path = rest;
+      i += 1;
+    }
+
+    const entry: { additions?: number; deletions?: number } = {};
+    if (addStr !== '-') entry.additions = Number(addStr);
+    if (delStr !== '-') entry.deletions = Number(delStr);
+    stats.set(path, entry);
+  }
+
+  return stats;
+}
+
+/**
+ * Enrich one axis's `StatusChange` with its numstat line counts. A missing change stays missing; a
+ * missing/empty (binary) stats lookup leaves `additions`/`deletions` off.
+ */
+function withStats(
+  change: StatusChange | undefined,
+  stats: { additions?: number; deletions?: number } | undefined,
+): StatusChange | undefined {
+  if (change === undefined) return undefined;
+  if (stats === undefined) return change;
+  return { ...change, ...stats };
+}
+
+/**
  * The git engine, as an Effect service (DI via Layer). Methods return Effects with typed errors.
- * Skeleton: `status` proves the shape (simple-git → contracts `Status`). Real mapping — including
- * the two-axis staged/unstaged model — lands with the business logic.
  */
 export class GitClient extends Effect.Service<GitClient>()('@gitoui/core/GitClient', {
   succeed: {
@@ -273,14 +472,39 @@ export class GitClient extends Effect.Service<GitClient>()('@gitoui/core/GitClie
         Effect.catchTag('GitProcessError', () => new NotARepositoryError({ path })),
       ),
 
+    /**
+     * The real two-axis Status (issue #60). Composes three raw git calls, merged by path:
+     *
+     * 1. `git status --porcelain=v2 --branch -z` — the branch/ahead/behind header and one record
+     *    per path with its `<XY>` staged/unstaged axes (see `parsePorcelainV2`).
+     * 2. `git diff --numstat -z` — per-path line counts for the UNSTAGED axis (work tree vs index).
+     * 3. `git diff --cached --numstat -z` — per-path line counts for the STAGED axis (index vs HEAD).
+     *
+     * Each axis is enriched from its own numstat, so a path staged then re-edited carries distinct
+     * stats per axis. Untracked/binary paths keep `kind` but no stats (they don't appear in numstat,
+     * or print `- -`). Maps `GitProcessError` → `RepoNotFoundError`, same as the list* methods.
+     */
     status: (repoPath: string): Effect.Effect<Status, RepoNotFoundError> =>
       withGit(repoPath, async (git) => {
-        const s = await git.status();
+        const [porcelain, unstagedNumstat, stagedNumstat] = await Promise.all([
+          git.raw(['status', '--porcelain=v2', '--branch', '-z']),
+          git.raw(['diff', '--numstat', '-z']),
+          git.raw(['diff', '--cached', '--numstat', '-z']),
+        ]);
+
+        const { branch, ahead, behind, entries } = parsePorcelainV2(porcelain);
+        const unstagedStats = parseNumstat(unstagedNumstat);
+        const stagedStats = parseNumstat(stagedNumstat);
+
         return {
-          branch: s.current ?? 'HEAD',
-          ahead: s.ahead,
-          behind: s.behind,
-          entries: [],
+          branch,
+          ahead,
+          behind,
+          entries: entries.map((entry) => ({
+            ...entry,
+            staged: withStats(entry.staged, stagedStats.get(entry.path)),
+            unstaged: withStats(entry.unstaged, unstagedStats.get(entry.path)),
+          })),
         } satisfies Status;
       }).pipe(Effect.catchTag('GitProcessError', () => new RepoNotFoundError({ path: repoPath }))),
 
