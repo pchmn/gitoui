@@ -475,8 +475,11 @@ export class GitClient extends Effect.Service<GitClient>()('@gitoui/core/GitClie
     /**
      * The real two-axis Status (issue #60). Composes three raw git calls, merged by path:
      *
-     * 1. `git status --porcelain=v2 --branch -z` — the branch/ahead/behind header and one record
-     *    per path with its `<XY>` staged/unstaged axes (see `parsePorcelainV2`).
+     * 1. `git status --porcelain=v2 --branch --untracked-files=all -z` — the branch/ahead/behind
+     *    header and one record per path with its `<XY>` staged/unstaged axes (see
+     *    `parsePorcelainV2`). `--untracked-files=all` expands untracked directories to their
+     *    individual files (git's default folds them to a single dir entry) so each new file is a
+     *    row, matching what users see in other clients.
      * 2. `git diff --numstat -z` — per-path line counts for the UNSTAGED axis (work tree vs index).
      * 3. `git diff --cached --numstat -z` — per-path line counts for the STAGED axis (index vs HEAD).
      *
@@ -487,7 +490,7 @@ export class GitClient extends Effect.Service<GitClient>()('@gitoui/core/GitClie
     status: (repoPath: string): Effect.Effect<Status, RepoNotFoundError> =>
       withGit(repoPath, async (git) => {
         const [porcelain, unstagedNumstat, stagedNumstat] = await Promise.all([
-          git.raw(['status', '--porcelain=v2', '--branch', '-z']),
+          git.raw(['status', '--porcelain=v2', '--branch', '--untracked-files=all', '-z']),
           git.raw(['diff', '--numstat', '-z']),
           git.raw(['diff', '--cached', '--numstat', '-z']),
         ]);

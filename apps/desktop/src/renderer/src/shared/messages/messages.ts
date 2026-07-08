@@ -67,6 +67,18 @@ export const messages = {
     emptyYet: 'No stashes yet.',
     emptyFiltered: 'No stashes match filter.',
   },
+  inspector: {
+    changesTab: 'Changes',
+    treeTab: 'Tree',
+  },
+  changesPanel: {
+    failedToLoad: 'Failed to load status.',
+    repoNotFound: (path: string) => `Repository not found: ${path}`,
+    clean: 'Clean working tree',
+    stagedHeading: 'STAGED',
+    unstagedHeading: 'UNSTAGED',
+    retry: 'Retry',
+  },
   commitGraph: {
     failedToLoad: 'Failed to load commits.',
     repoNotFound: (path: string) => `Repository not found: ${path}`,

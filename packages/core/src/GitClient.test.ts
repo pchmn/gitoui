@@ -1024,6 +1024,12 @@ describe('GitClient.status', () => {
 
     // Untracked file — never staged.
     writeFileSync(join(dirty, 'untracked.txt'), 'new\n');
+
+    // Untracked directory with nested files — `--untracked-files=all` must expand it to one entry
+    // per file (git's default folds it to a single `new-dir/` row).
+    mkdirSync(join(dirty, 'new-dir'), { recursive: true });
+    writeFileSync(join(dirty, 'new-dir', 'one.txt'), 'one\n');
+    writeFileSync(join(dirty, 'new-dir', 'two.txt'), 'two\n');
   });
 
   afterAll(() => rmSync(base, { recursive: true, force: true }));
@@ -1047,6 +1053,21 @@ describe('GitClient.status', () => {
       const untracked = entries.find((e) => e.path === 'untracked.txt');
       expect(untracked?.staged).toBeUndefined();
       expect(untracked?.unstaged).toEqual({ kind: 'untracked' });
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('expands an untracked directory to one entry per file (--untracked-files=all)', () =>
+    Effect.gen(function* () {
+      const client = yield* GitClient;
+      const { entries } = yield* client.status(dirty);
+      // Not folded to a single `new-dir/` row — each nested file is its own untracked entry.
+      expect(entries.some((e) => e.path === 'new-dir/')).toBe(false);
+      expect(entries.find((e) => e.path === 'new-dir/one.txt')?.unstaged).toEqual({
+        kind: 'untracked',
+      });
+      expect(entries.find((e) => e.path === 'new-dir/two.txt')?.unstaged).toEqual({
+        kind: 'untracked',
+      });
     }).pipe(Effect.provide(GitClient.Default)),
   );
 
