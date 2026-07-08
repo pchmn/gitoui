@@ -20,12 +20,15 @@ export const commitsKey = (repoPath: string) => ['commits', repoPath] as const;
 export const PAGE_LIMIT = 300;
 
 /**
- * A `Commit` row in the collection. Two deltas from the contract type: mutable (TanStack DB's
+ * A `Commit` row in the collection. Three deltas from the contract type: mutable (TanStack DB's
  * `queryCollectionOptions` without a `schema` wants a mutable item type — `effect/Schema` types
- * are all-`readonly`), and tagged with the `repoPath` it belongs to, because the collection holds
- * *all* repos' commits and live queries narrow by `where(eq(commits.repoPath, …))`.
+ * are all-`readonly`), tagged with the `repoPath` it belongs to, because the collection holds
+ * *all* repos' commits and live queries narrow by `where(eq(commits.repoPath, …))`, and carrying
+ * `seq` — the row's position in `listCommits`'s (topo-ordered, `scope: 'allRefs'`) walk, since the
+ * collection is an unordered key→value store and the lane sweep (ADR 0007) requires strict
+ * children-before-parents order, which `committedAt` doesn't guarantee (clock skew, rebases).
  */
-type CommitRow = { -readonly [K in keyof Commit]: Commit[K] } & { repoPath: string };
+type CommitRow = { -readonly [K in keyof Commit]: Commit[K] } & { repoPath: string; seq: number };
 
 type CommitsCollection = Collection<CommitRow, string | number, QueryCollectionUtils<CommitRow>>;
 
@@ -75,15 +78,19 @@ function commitsCollection(queryClient: QueryClient): CommitsCollection {
         // No repo in the predicate (or the "no Repository open" sentinel): nothing to fetch —
         // an empty subset owns no rows, so it evicts nothing.
         if (repoPath === undefined || repoPath === '') return [];
+        const skip = opts?.offset ?? 0;
         const commits = await window.git.listCommits({
           repoPath,
-          skip: opts?.offset ?? 0,
+          skip,
           limit: limit ?? PAGE_LIMIT,
           // The graph shows the whole repo, not just HEAD's ancestry — every Branch,
           // remote-tracking branch, and Tag (issue #54).
           scope: 'allRefs',
         });
-        return commits.map((commit) => ({ ...commit, repoPath }));
+        // `seq` is the absolute position in the topo-ordered walk (`skip` + the row's offset
+        // within this fetch) — stable across overlapping subsets (issue #44's grown-window
+        // re-fetch) since `scope: 'allRefs'` always walks the same HEAD-rooted order from 0.
+        return commits.map((commit, i) => ({ ...commit, repoPath, seq: skip + i }));
       },
       // A sha alone isn't unique across Repositories (clones, forks) — scope the key by repo.
       getKey: (commit) => `${commit.repoPath}:${commit.sha}`,
@@ -130,17 +137,17 @@ export function useCommits(repoPath: string | null): {
 
   // A collection is an unordered key→value store, so a bare `q.from` iterates in the collection's
   // internal (key) order, *not* `git log`'s order — hence the explicit `orderBy`. We sort by
-  // `committedAt` desc to mirror `git log`, which orders by commit date (the row still shows the
-  // *authored* date, exactly as `git log`'s `Date:` line does). Topological ordering comes with
-  // the lanes slice. `''` is the "no Repository open" sentinel — it matches no rows and the
-  // `queryFn` fetches nothing for it. (The collection stays out of the deps — it's stable per
-  // QueryClient.)
+  // `seq` ascending — the topo-ordered position `listCommits`'s `scope: 'allRefs'` walk assigned
+  // (ADR 0007) — rather than `committedAt`, because the lane sweep requires strict
+  // children-before-parents order, which commit dates don't guarantee. `''` is the "no Repository
+  // open" sentinel — it matches no rows and the `queryFn` fetches nothing for it. (The collection
+  // stays out of the deps — it's stable per QueryClient.)
   const { data, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage } = useLivePaginatedQuery(
     (q) =>
       q
         .from({ commits: collection })
         .where(({ commits }) => eq(commits.repoPath, repoPath ?? ''))
-        .orderBy(({ commits }) => commits.committedAt, 'desc'),
+        .orderBy(({ commits }) => commits.seq, 'asc'),
     {
       pageSize: PAGE_LIMIT,
       fetchingKey: repoPath === null ? ['commits'] : commitsKey(repoPath),

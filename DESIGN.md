@@ -18,11 +18,11 @@ colors:
   hairline: "oklch(0.900 0.0164 50.6)"
   input: "oklch(0.920 0.0131 50.6)"
   alert: "oklch(0.577 0.245 27.325)"
-  lane-1: "oklch(0.650 0.0656 50.6)"
-  lane-2: "oklch(0.550 0.0656 110.6)"
-  lane-3: "oklch(0.450 0.0656 170.6)"
-  lane-4: "oklch(0.600 0.0656 230.6)"
-  lane-5: "oklch(0.500 0.0656 290.6)"
+  lane-1: "oklch(0.650 0.12 50.6)"
+  lane-2: "oklch(0.550 0.12 110.6)"
+  lane-3: "oklch(0.450 0.12 170.6)"
+  lane-4: "oklch(0.600 0.12 230.6)"
+  lane-5: "oklch(0.500 0.12 290.6)"
 typography:
   heading:
     fontFamily: "DM Sans Variable, sans-serif"
@@ -172,13 +172,16 @@ saturation reserved for actions, state, and the graph.
   work shadows would do elsewhere. In dark mode this becomes a low-alpha white (`/10`).
 
 ### Tertiary — Graph Lanes
-- **Lane 1–5** (`oklch(0.65 0.066 50.6)` … `oklch(0.50 0.066 290.6)`): the commit graph's branch
+- **Lane 1–5** (`oklch(0.65 0.12 50.6)` … `oklch(0.50 0.12 290.6)`): the commit graph's branch
   lanes, hue-rotated +0/+60/+120/+180/+240 from the source with stepped lightness. Their chroma
-  follows the source — but never below a **floor of 0.05** (`max(c, 0.05)`), so a calm source yields
-  calm lanes while a grey source still yields five distinguishable ones. The lightness steps are
-  deliberately non-monotonic (0.65/0.55/0.45/0.60/0.50) so any two *adjacent* lanes differ by ≥0.10,
-  including at the `col % 5` wrap. Lanes are distinguished by **lightness + position + ref label**,
-  not hue alone. Runtime tokens are `--lane-1…5` (the shadcn `--chart-*` set is not the graph's).
+  follows the source — but never below a **floor of 0.12** (`max(c, 0.12)`): the lanes are one of
+  the five places saturated color is *spent* (the Spent Color Rule), so they must read as nameable
+  hues even under the calm default source, and a grey source still yields five distinguishable
+  ones. The lightness steps are deliberately non-monotonic (light 0.65/0.55/0.45/0.60/0.50, dark
+  lifted to 0.78/0.65/0.55/0.72/0.60 so lanes stay luminous on the dark canvas) with any two
+  *adjacent* lanes ≥0.10 apart, including at the `col % 5` wrap. Lanes are distinguished by
+  **lightness + position + ref label**, not hue alone. Runtime tokens are `--lane-1…5` (the shadcn
+  `--chart-*` set is not the graph's).
 
 ### Semantic
 - **Alert** (`oklch(0.577 0.245 27.325)`): the one fixed, source-independent color — destructive
@@ -337,7 +340,10 @@ persisted across sessions. Min/max keep either side from crowding out the graph.
 
 ### Ref pills
 - Branch / tag markers as small `rounded-sm` Micro-text pills on Accent Surface; the active branch
-  and special states (WIP, HEAD) take a stronger tint. Tiny, quiet, scannable.
+  and special states (WIP, HEAD) take a stronger tint. Tiny, quiet, scannable. Fills are always
+  opaque (the strong tint is pre-mixed over the canvas, not a translucent primary): in the graph,
+  hovering a row extends its pills over the lane lines, and a see-through pill would let the
+  lines bleed into the text.
 
 ### Toasts
 The app's transient feedback / error surface, stacked bottom-right. A true overlay, so it earns the
@@ -380,6 +386,48 @@ the lane color. The current row (Uncommitted / WIP) is highlighted with a strong
   ref label**, so the graph reads for color-blind users and survives a low-chroma source.
 - Because lane chroma follows the source, enforce a **minimum lane chroma and clear lightness
   steps** so lanes never collapse into one another when the user picks a desaturated tint.
+- **The lanes zone caps at a max width** (12 columns) and pans horizontally behind one shared,
+  quiet scrollbar — a busy repo is honestly wide (each branch rides its column down to its fork
+  point), but it must never push the COMMIT column out of the frame.
+- **Lane lines rest slightly translucent** (80%) so the graph reads light rather than heavy;
+  nodes (the Commits) stay fully opaque.
+- **Every row fill is the row's own lane color — never a neutral.** The row tint is a four-step
+  ladder of the lane color: barely-there at rest (6%), a lifted step for the armed run's members
+  (16%), a stronger step for the row under the pointer (26%, so the hovered row stays
+  identifiable as the anchor inside the lit run), and the strongest, persistent step for the
+  selected row (36%). Selection outranks hover. A neutral fill anywhere on this ladder — a Muted
+  Surface hover, an Accent Surface selection — would be the column's one grey swatch and break
+  out of a highlighted run instead of reading as part of it; in the graph, selection *spends*
+  the lane's color (the Spent Color Rule), unlike the rail's Accent-Surface selection.
+- **Hovering reveals what the dense columns truncate — scoped to what the pointer asks for,
+  immediately (no hover-intent delay, unlike the run highlight below).** Ref pills ellipsize
+  inside the REFS zone at rest — they shrink and show `…`, the zone never hard-crops a name
+  mid-letter. Hovering the zone itself extends them past it, floating over the lanes
+  (GitKraken-familiar; the opaque pill fills keep the lane lines from bleeding through):
+  covering the graph is a deliberate, momentary act of reading the ref, never a side effect of
+  sweeping the row (a row-wide trigger would blanket the lanes on every pass). Hovering an
+  undecorated row instantly surfaces the Branch name of the run it rides as a **ghost pill** in
+  the REFS zone — ellipsized like any pill and faded to 60%, contextual info rather than a real
+  ref; the zone hover extends it full and solid. When no Ref names the line (its Branch merged
+  and deleted, or its tip beyond the loaded window), the name is recovered from git's
+  conventional merge subject (`Merge branch 'X' into Y`); a real Ref always wins. Hovering the
+  row also unfolds the author's full name in place (the AUTHOR column holds a fixed truncated
+  width at rest so the column keeps its rhythm; the subject, which already truncates, absorbs
+  the squeeze — nothing is covered).
+- **Hovering a Commit row (or one of its ref pills) reads its branch as a unit**: the lane run
+  the Commit rides (tip to fork point) lifts — its Commits' rows take the stronger lane tint and
+  stay fully legible, the line goes fully opaque across its whole range at unchanged weight (the
+  opacity spread carries the pop; no thickening, so the geometry stays put and the fade covers
+  the whole transition), while everything else recedes: other lines to 35%, their nodes more
+  gently to 50% (Commits stay locatable), and the other rows' subject + author to 50%. (The
+  name reveals — ghost pill, pill extension, author name — are the immediate layer above and
+  are not tied to this arming.)
+  The highlight arms on hover *intent* — a 500ms rest, so sweeping the list never flickers the
+  graph. Once armed, moving along the highlighted run's own rows **hands the highlight over
+  seamlessly** (no reset, no re-arm delay — the branch stays lit while you read it); moving
+  anywhere else — a row of another run, or out of the rows — **resets it immediately**. The
+  150ms opacity fade (`motion-safe` only) softens both edges. Pointer-only enhancement —
+  everything it reveals is reachable without it. The graph zone itself is not a hover target.
 
 ## 6. Do's and Don'ts
 

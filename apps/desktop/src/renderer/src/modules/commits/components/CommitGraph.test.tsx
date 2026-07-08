@@ -4,7 +4,7 @@
 
 import type { Commit } from '@gitoui/contracts/git';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { CommitSelectionProvider } from '#renderer/modules/commits/CommitSelectionContext';
@@ -170,8 +170,11 @@ describe('CommitGraph refs', () => {
 
 describe('CommitGraph ordering', () => {
   // The TanStack DB collection is keyed by `sha`, so without an explicit `orderBy` rows come out in
-  // sha order, not chronological. Feed them out of order and assert newest-commit-date-first.
-  it('renders commits newest-first by commit date, regardless of input order', async () => {
+  // sha order, not `listCommits`'s order. The lane sweep (ADR 0007) requires strict
+  // children-before-parents order, which `listCommits`'s `scope: 'allRefs'` walk already
+  // guarantees (topo order) — so the graph must render in the order the array came back in, not
+  // re-sort by `committedAt` (which the topo walk needn't match, e.g. across clock skew).
+  it('renders commits in listCommits order (topological), not by commit date', async () => {
     const commits = [
       makeCommit({ sha: 'mid', subject: 'the middle one', committedAt: 2_000 }),
       makeCommit({ sha: 'old', subject: 'the oldest one', committedAt: 1_000 }),
@@ -179,15 +182,15 @@ describe('CommitGraph ordering', () => {
     ];
     render(<Wrapper listCommitsMock={() => Promise.resolve(commits)} />);
 
-    await screen.findByText('the newest one');
+    await screen.findByText('the middle one');
     // Only assert the relative order of the commit rows — a terminus row also renders (3 < PAGE_LIMIT).
     const rows = screen
       .getAllByRole('listitem')
       .map((li) => li.textContent ?? '')
       .filter((text) => text.includes('the '));
-    expect(rows[0]).toContain('the newest one');
-    expect(rows[1]).toContain('the middle one');
-    expect(rows[2]).toContain('the oldest one');
+    expect(rows[0]).toContain('the middle one');
+    expect(rows[1]).toContain('the oldest one');
+    expect(rows[2]).toContain('the newest one');
   });
 });
 
@@ -517,5 +520,208 @@ describe('CommitGraph selection', () => {
     });
     expect(firstRow.getAttribute('data-selected')).toBe('false');
     expect(secondRow.getAttribute('data-selected')).toBe('true');
+  });
+});
+
+describe('CommitGraph lanes', () => {
+  // The fork+merge DAG from laneLayout's fixture 2 (issue #55): M (the current tip, a merge) forks
+  // into B/F, both converging back into A. Rendered through the component (issue #56) — one
+  // per-row `<svg>`, one hollow-ring node on the merge row, and edges/nodes referencing the
+  // `--lane-*` tokens. Attributes only, never pixels.
+  it('renders per-row SVG lanes, nodes, and edges over the fork+merge DAG', async () => {
+    const commits = [
+      makeCommit({
+        sha: 'M',
+        parents: ['B', 'F'],
+        subject: 'Merge branch F into main',
+        refs: [{ _tag: 'Branch', name: 'main', current: true }],
+        committedAt: 4_000,
+      }),
+      makeCommit({ sha: 'B', parents: ['A'], subject: 'on the main line', committedAt: 3_000 }),
+      makeCommit({ sha: 'F', parents: ['A'], subject: 'on the forked branch', committedAt: 2_000 }),
+      makeCommit({ sha: 'A', parents: [], subject: 'the common ancestor', committedAt: 1_000 }),
+    ];
+    render(<Wrapper listCommitsMock={() => Promise.resolve(commits)} />);
+
+    await screen.findByText('Merge branch F into main');
+
+    // Every commit row carries its own per-row SVG — composition with virtualization is free.
+    const rows = screen
+      .getAllByRole('listitem')
+      .filter((li) => li.querySelector('svg[data-slot="lane-graph"]'));
+    expect(rows).toHaveLength(4);
+
+    // M is the merge commit: a hollow ring (no fill, a stroked --lane-* token), not a filled dot.
+    const mergeRow = (await screen.findByText('Merge branch F into main')).closest('li');
+    const mergeNode = mergeRow?.querySelector('circle[data-slot="lane-node"]');
+    expect(mergeNode?.getAttribute('data-merge')).toBe('true');
+    expect(mergeNode?.getAttribute('fill')).toBe('none');
+    expect(mergeNode?.getAttribute('stroke')).toMatch(/^var\(--lane-[1-5]\)$/);
+
+    // An ordinary commit's node is a filled dot referencing a --lane-* token.
+    const ancestorRow = screen.getByText('the common ancestor').closest('li');
+    const ancestorNode = ancestorRow?.querySelector('circle[data-slot="lane-node"]');
+    expect(ancestorNode?.getAttribute('data-merge')).toBe('false');
+    expect(ancestorNode?.getAttribute('fill')).toMatch(/^var\(--lane-[1-5]\)$/);
+
+    // The fork (M diverging to F) and the merge (F's lane converging back into its fork point A)
+    // both render as elbow edges (ADR 0007 amendment), each stroked with a --lane-* token: the
+    // diverge bends in M's row (`below`), the converge bends in A's row (`above`).
+    const mergeEdge = mergeRow?.querySelector('path[data-slot="lane-transition"]');
+    expect(mergeEdge?.getAttribute('data-direction')).toBe('below');
+    const forkEdge = ancestorRow?.querySelector('path[data-slot="lane-transition"]');
+    expect(forkEdge?.getAttribute('data-direction')).toBe('above');
+    const edges = rows.flatMap((row) =>
+      Array.from(row.querySelectorAll('path[data-slot="lane-transition"]')),
+    );
+    expect(edges.length).toBeGreaterThan(0);
+    for (const edge of edges) {
+      expect(edge.getAttribute('stroke')).toMatch(/^var\(--lane-[1-5]\)$/);
+    }
+
+    // No dangling stubs: M is a tip (fresh lane — nothing above its node) and A is a root
+    // (nothing below its node); own-column half-verticals are gated by lineAbove/lineBelow.
+    expect(mergeRow?.querySelector('line[data-half="top"]')).toBeNull();
+    expect(mergeRow?.querySelector('line[data-half="bottom"]')).not.toBeNull();
+    expect(ancestorRow?.querySelector('line[data-half="top"]')).not.toBeNull();
+    expect(ancestorRow?.querySelector('line[data-half="bottom"]')).toBeNull();
+
+    // A narrow graph needs no horizontal scroll — no scrollbar proxy.
+    expect(document.querySelector('[data-slot="lanes-scrollbar"]')).toBeNull();
+  });
+
+  // Hovering a Commit row highlights its Branch's whole lane run (GitKraken-familiar): the run's
+  // Commit rows read as a set (stronger tint), the line goes fully opaque across its range while
+  // everything else recedes. The name reveals are CSS-driven and instant, independent of the
+  // arming: an undecorated row carries its run's Branch name as a ghost pill shown on the row's
+  // hover, and a decorated row's pills ellipsize at rest and extend on the REFS zone's hover.
+  it('hovering a row highlights its branch run; undecorated rows carry a ghost Branch pill', async () => {
+    const commits = [
+      makeCommit({
+        sha: 'M',
+        parents: ['B', 'F'],
+        subject: 'the merge',
+        refs: [{ _tag: 'Branch', name: 'main', current: true }],
+        committedAt: 4_000,
+      }),
+      makeCommit({ sha: 'B', parents: ['A'], subject: 'on the main line', committedAt: 3_000 }),
+      makeCommit({
+        sha: 'F',
+        parents: ['A'],
+        subject: 'forked work',
+        refs: [{ _tag: 'Branch', name: 'feat/forked-branch-name', current: false }],
+        committedAt: 2_000,
+      }),
+      makeCommit({ sha: 'A', parents: [], subject: 'the ancestor', committedAt: 1_000 }),
+    ];
+    render(<Wrapper listCommitsMock={() => Promise.resolve(commits)} />);
+
+    const mainRow = (await screen.findByText('on the main line')).closest('li');
+    const forkedRow = screen.getByText('forked work').closest('li');
+    if (!mainRow || !forkedRow) throw new Error('rows not found');
+
+    // At rest, lines sit at the light translucency; nodes (the Commits) stay fully opaque.
+    expect(mainRow.querySelector('line[data-col="1"]')?.getAttribute('opacity')).toBe('0.8');
+    expect(mainRow.querySelector('[data-slot="lane-node"]')?.getAttribute('opacity')).toBe('1');
+
+    // The highlight is armed on hover *intent* (a short rest), so transitions go through fake
+    // timers: a sweep that doesn't rest never fires.
+    vi.useFakeTimers();
+    try {
+      // Hovering F's row: nothing happens instantly (intent not yet armed)...
+      fireEvent.mouseOver(forkedRow);
+      expect(forkedRow.getAttribute('data-run-member')).toBe('false');
+
+      // ...then the forked branch's run lifts: F is a member, B is not, the run's line (column
+      // 1) goes fully opaque on every row it crosses while every other line recedes — the opacity
+      // spread alone carries the highlight; stroke weight never changes.
+      act(() => vi.advanceTimersByTime(600));
+      expect(forkedRow.getAttribute('data-run-member')).toBe('true');
+      expect(mainRow.getAttribute('data-run-member')).toBe('false');
+      expect(mainRow.querySelector('line[data-col="1"]')?.getAttribute('stroke-width')).toBe('2');
+      expect(mainRow.querySelector('line[data-col="1"]')?.getAttribute('opacity')).toBe('1');
+      expect(forkedRow.querySelector('line[data-col="0"]')?.getAttribute('stroke-width')).toBe('2');
+      expect(forkedRow.querySelector('line[data-col="0"]')?.getAttribute('opacity')).toBe('0.35');
+      // Other lanes' nodes recede more gently than their lines; the hovered run's stays full.
+      expect(mainRow.querySelector('[data-slot="lane-node"]')?.getAttribute('opacity')).toBe('0.5');
+      expect(forkedRow.querySelector('[data-slot="lane-node"]')?.getAttribute('opacity')).toBe('1');
+      // Only the run's own Commits stay fully legible: the other rows' subject/author recede.
+      expect(screen.getByText('on the main line').className).toContain('opacity-50');
+      expect(screen.getByText('forked work').className).not.toContain('opacity-50');
+
+      // Moving straight to a row of a DIFFERENT run is a single native mouseout whose leave +
+      // enter React dispatches in the same batch: the old highlight must reset instantly AND the
+      // new row must re-arm with intent — no instant handover across runs.
+      fireEvent.mouseOut(forkedRow, { relatedTarget: mainRow });
+      expect(forkedRow.getAttribute('data-run-member')).toBe('false');
+      expect(mainRow.getAttribute('data-run-member')).toBe('false');
+      expect(mainRow.querySelector('line[data-col="1"]')?.getAttribute('opacity')).toBe('0.8');
+
+      // ...then, after the rest, the undecorated B row highlights main's run.
+      act(() => vi.advanceTimersByTime(600));
+      expect(mainRow.getAttribute('data-run-member')).toBe('true');
+      expect(forkedRow.getAttribute('data-run-member')).toBe('false');
+
+      // Moving along the highlighted run's OWN rows hands the highlight over seamlessly — no
+      // reset, no re-arm delay: the branch stays lit while the pointer walks it.
+      const ancestorRow = screen.getByText('the ancestor').closest('li');
+      if (!ancestorRow) throw new Error('ancestor row not found');
+      fireEvent.mouseOut(mainRow, { relatedTarget: ancestorRow });
+      expect(mainRow.getAttribute('data-run-member')).toBe('true');
+      expect(ancestorRow.getAttribute('data-run-member')).toBe('true');
+      expect(mainRow.querySelector('line[data-half="top"]')?.getAttribute('opacity')).toBe('1');
+
+      // Leaving the rows clears everything instantly.
+      fireEvent.mouseLeave(ancestorRow);
+      expect(mainRow.getAttribute('data-run-member')).toBe('false');
+      expect(ancestorRow.getAttribute('data-run-member')).toBe('false');
+
+      // The reveals are CSS-driven, no arming involved: every undecorated row of a named run
+      // carries the run's Branch name as a hidden ghost pill (shown the moment the row is
+      // hovered), and a decorated row's pill carries its full name regardless of hover — the
+      // REFS zone ellipsizes at rest and releases it on the zone's own hover.
+      for (const row of [mainRow, ancestorRow]) {
+        const ghost = within(row).getByText('main');
+        expect(ghost.className).toContain('hidden');
+        expect(ghost.className).toContain('group-hover:inline-block');
+      }
+      expect(within(forkedRow).queryByText('main')).toBeNull();
+      expect(within(forkedRow).getByText('feat/forked-branch-name')).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Lanes hold their columns down to their fork point (ADR 0007 amendment), so a busy repo is
+  // honestly wide — the lanes zone caps at a max width and scrolls horizontally behind a shared
+  // scrollbar proxy instead of pushing the COMMIT column away.
+  it('caps the lanes viewport and mounts the shared horizontal scrollbar when lanes overflow', async () => {
+    // 14 unrelated tips → 14 concurrent lanes, each riding its own column to the page end.
+    const commits = Array.from({ length: 14 }, (_, i) =>
+      makeCommit({
+        sha: `T${i}`,
+        parents: [`P${i}`],
+        subject: `tip ${i}`,
+        committedAt: 20_000 - i,
+      }),
+    );
+    render(<Wrapper listCommitsMock={() => Promise.resolve(commits)} />);
+
+    const firstRow = (await screen.findByText('tip 0')).closest('li');
+    const viewport = firstRow?.querySelector('[data-slot="lanes-viewport"]') as HTMLElement | null;
+    const svg = viewport?.querySelector('svg[data-slot="lane-graph"]');
+    if (!viewport || !svg) throw new Error('lanes viewport not found');
+
+    // The SVG carries the full lane width; the viewport clips it to the cap.
+    const viewportWidth = Number.parseInt(viewport.style.width, 10);
+    const svgWidth = Number(svg.getAttribute('width'));
+    expect(svgWidth).toBeGreaterThan(viewportWidth);
+
+    // The shared scrollbar proxy spans the same full lane width, aligned under the viewport.
+    const proxy = document.querySelector('[data-slot="lanes-scrollbar"]') as HTMLElement | null;
+    expect(proxy).not.toBeNull();
+    const spacer = proxy?.firstElementChild as HTMLElement | null;
+    expect(Number.parseInt(spacer?.style.width ?? '0', 10)).toBe(svgWidth);
+    expect(Number.parseInt(proxy?.style.width ?? '0', 10)).toBe(viewportWidth);
   });
 });
