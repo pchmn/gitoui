@@ -55,14 +55,31 @@ export const ChangeKind = Schema.Literal('added', 'modified', 'deleted', 'rename
 export type ChangeKind = typeof ChangeKind.Type;
 
 /**
+ * One axis's change detail. `kind` is always present; `additions`/`deletions` are the `git diff
+ * --numstat` line counts, OMITTED (schema-optional) for binary files (numstat prints `- -`) and for
+ * Untracked paths (which never appear in a numstat). The two axes of a `StatusEntry` carry their own
+ * `StatusChange` — a staged-then-re-edited path has different stats on each axis.
+ */
+export const StatusChange = Schema.Struct({
+  kind: ChangeKind,
+  additions: Schema.optional(Schema.Number),
+  deletions: Schema.optional(Schema.Number),
+});
+export type StatusChange = typeof StatusChange.Type;
+
+/**
  * Two-axis model (see CONTEXT.md): a single path may be Staged AND Unstaged at once
- * (e.g. `git add a.txt` then edit `a.txt` again). NOT a staged-xor-unstaged partition.
+ * (e.g. `git add a.txt` then edit `a.txt` again) — each axis carries its own `StatusChange`. NOT a
+ * staged-xor-unstaged partition. `oldPath` is set only for renames (the pre-rename path; `path` is
+ * always the current/new path).
  */
 export const StatusEntry = Schema.Struct({
   path: Schema.String,
-  staged: Schema.optional(ChangeKind),
-  unstaged: Schema.optional(ChangeKind),
+  oldPath: Schema.optional(Schema.String),
+  staged: Schema.optional(StatusChange),
+  unstaged: Schema.optional(StatusChange),
 });
+export type StatusEntry = typeof StatusEntry.Type;
 
 export const Status = Schema.Struct({
   branch: Schema.String,
