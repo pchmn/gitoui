@@ -2,6 +2,9 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/dm-sans";
+@import "@fontsource/dm-mono/300.css";
+@import "@fontsource/dm-mono/400.css";
+@import "@fontsource/dm-mono/500.css";
 
 @custom-variant dark (&:is(.dark *));
 @source "../../../apps/**/*.{ts,tsx}";
@@ -54,6 +57,8 @@
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
   --font-sans: "DM Sans Variable", sans-serif;
+  /* Code, diffs, and raw file content only (DESIGN.md's Two-Family Rule) — never UI chrome. */
+  --font-mono: "DM Mono", ui-monospace, SFMono-Regular, monospace;
 
   /* The one sanctioned shadow (DESIGN.md §4): true overlays only — popovers, menus, toasts.
      Soft, ≤16px blur, tinted with Ink (derived from the source) and never pure black. */
