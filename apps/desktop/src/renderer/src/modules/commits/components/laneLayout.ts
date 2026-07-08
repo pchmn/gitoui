@@ -11,15 +11,16 @@ export type FrontierLane = { expects: string } | null;
 export type Frontier = {
   lanes: readonly FrontierLane[];
   headSeen: boolean;
-  /**
-   * Divergence transitions opened by the last row of the previous page (ADR 0007 rule 4) that
-   * belong on the *next* row's `above` — i.e. the half of the interstice not yet attached to a
-   * row, carried across the page boundary so the incremental sweep matches the single-pass one.
-   */
-  pendingAbove: readonly Transition[];
 };
 
-/** A half-curve within one row's interstice: the lane column above/below it changes. */
+/**
+ * One elbow bend, drawn entirely within one half of one row (elbow routing, ADR 0007 amendment).
+ * Which half it lives in determines its shape: a `below` transition *diverges* from the row's node
+ * (horizontal at the row's center, quarter-corner, vertical down `toCol`); an `above` transition
+ * *converges* into this row (vertical at `fromCol` from the row boundary, quarter-corner,
+ * horizontal into `toCol` at the row's center). The rest of each edge is plain verticals, already
+ * carried by the rows' vertical segments — every edge is recorded (and drawn) exactly once.
+ */
 export type Transition = { fromCol: number; toCol: number };
 
 /** One row's lane assignment and the row-local segments needed to render it (ADR 0007). */
@@ -31,13 +32,20 @@ export type LayoutRow = {
   isMerge: boolean;
   /** Columns whose line passes straight through this row, unaffected by its own transitions. */
   verticals: number[];
-  /** Half-curves in the interstice above this row. */
+  /** Converging edges bending into this row's node (lanes that expected this Commit's SHA). */
   above: Transition[];
-  /** Half-curves in the interstice below this row. */
+  /** Diverging edges leaving this row's node (a merge's non-first parents joining/opening lanes). */
   below: Transition[];
+  /**
+   * A child's edge arrives straight into this node from above — the Commit was claimed by an open
+   * lane. False for a tip (fresh lane): nothing to draw above the node.
+   */
+  lineAbove: boolean;
+  /** The Commit's lane continues straight below toward its first parent. False for a root. */
+  lineBelow: boolean;
 };
 
-const EMPTY_FRONTIER: Frontier = { lanes: [], headSeen: false, pendingAbove: [] };
+const EMPTY_FRONTIER: Frontier = { lanes: [], headSeen: false };
 
 /** The subset of `Commit` the sweep needs — no diff/message fields, just the DAG + decoration. */
 type LayoutCommit = Pick<Commit, 'sha' | 'parents' | 'refs'>;
@@ -67,28 +75,24 @@ export function laneLayout(
 ): { rows: LayoutRow[]; frontierOut: Frontier } {
   const lanes: FrontierLane[] = [...frontierIn.lanes];
   let headSeen = frontierIn.headSeen;
-  // Divergences opened by the previous row (rule 4), waiting to land on the next row's `above`.
-  let pendingAbove: Transition[] = [...frontierIn.pendingAbove];
 
   const rows: LayoutRow[] = [];
 
   for (const commit of commits) {
-    const above: Transition[] = [...pendingAbove];
-    pendingAbove = [];
+    const above: Transition[] = [];
 
     // Rule 2/3: claim the leftmost lane already expecting this SHA, or allocate a fresh one.
     let col: number;
     const claimIdx = lanes.findIndex((lane) => lane !== null && lane.expects === commit.sha);
     if (claimIdx !== -1) {
       col = claimIdx;
-      // Every *other* lane expecting the same SHA converges into this one (rule 2, rule 6).
+      // Every *other* lane expecting the same SHA converges into this one right here (rule 2) —
+      // this row is those branches' fork point, where their lines bend in from their own columns.
       for (let i = 0; i < lanes.length; i++) {
         if (i === col) continue;
         const lane = lanes[i];
         if (lane && lane.expects === commit.sha) {
           above.push({ fromCol: i, toCol: col });
-          const previousRow = rows[rows.length - 1];
-          previousRow?.below.push({ fromCol: i, toCol: col });
           lanes[i] = null;
         }
       }
@@ -115,6 +119,8 @@ export function laneLayout(
       verticals,
       above,
       below: [],
+      lineAbove: claimIdx !== -1,
+      lineBelow: false,
     };
     rows.push(row);
 
@@ -125,22 +131,12 @@ export function laneLayout(
       // No parents: this lane frees after its row.
       lanes[col] = null;
     } else {
-      // Rule 6, resolved eagerly (not deferred to when `firstParent` is itself claimed — that
-      // would require mutating a row from a page that may already be finalized): if some other
-      // lane already expects the same first parent, the two lanes collapse right here. The
-      // leftmost of the two columns survives and keeps the expectation; the other one dies.
-      const existingIdx = lanes.findIndex((lane) => lane !== null && lane.expects === firstParent);
-      if (existingIdx !== -1) {
-        const survivor = Math.min(col, existingIdx);
-        const dying = Math.max(col, existingIdx);
-        const transition: Transition = { fromCol: dying, toCol: survivor };
-        row.below.push(transition);
-        pendingAbove.push(transition);
-        lanes[dying] = null;
-        if (survivor === col) lanes[col] = { expects: firstParent };
-      } else {
-        lanes[col] = { expects: firstParent };
-      }
+      // Even when another lane already expects the same first parent, this lane stays open: both
+      // ride their own columns down and fold together at the parent's row — the fork point — via
+      // the claim-time convergence above (ADR 0007 amendment). Collapsing eagerly here would bend
+      // the branch away right below this node, inverting the fork's visual direction.
+      lanes[col] = { expects: firstParent };
+      row.lineBelow = true;
 
       for (const parent of otherParents) {
         const otherExistingIdx = lanes.findIndex(
@@ -148,9 +144,7 @@ export function laneLayout(
         );
         const toCol = otherExistingIdx !== -1 ? otherExistingIdx : allocateSlot(lanes, 0);
         if (otherExistingIdx === -1) lanes[toCol] = { expects: parent };
-        const transition: Transition = { fromCol: col, toCol };
-        row.below.push(transition);
-        pendingAbove.push(transition);
+        row.below.push({ fromCol: col, toCol });
       }
     }
   }
@@ -159,5 +153,5 @@ export function laneLayout(
   // index must stay stable for the lanes to its right).
   while (lanes.length > 0 && lanes[lanes.length - 1] === null) lanes.pop();
 
-  return { rows, frontierOut: { lanes, headSeen, pendingAbove } };
+  return { rows, frontierOut: { lanes, headSeen } };
 }

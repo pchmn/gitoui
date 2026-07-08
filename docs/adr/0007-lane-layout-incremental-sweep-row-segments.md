@@ -41,3 +41,36 @@ canvas later would consume the same segments).
   `HEAD --branches --remotes --tags` — not `--all`, which would drag in `refs/stash`/`refs/notes`
   (not Refs in the glossary). The walk stays fully local; `--topo-order` buffers it, mitigated by
   git's commit-graph file.
+
+## Amendment: elbow routing and fork-point convergence (issue #56 legibility pass)
+
+Two changes over the original model, made together because the second is what gives the first its
+meaning:
+
+**Elbow routing replaces the midpoint S-curve.** The S-curve read as a shallow diagonal once real
+merges spanned several columns (~90px of horizontal travel over a 32px row crosses every
+intermediate lane at a near-flat angle — spaghetti). Transitions are now routed **orthogonally**
+(the transit-map elbow): the bend is a compact rounded quarter-corner confined to one half-row,
+everything else is vertical, so crossings with passing lanes stay perpendicular. Which half a
+transition sits in determines its shape:
+
+- **`below` = diverge** — the edge starts at the row's node (a merge's non-first parents). It
+  bends immediately: horizontal at the node's row center, corner, vertical down the target column.
+- **`above` = converge** — a branch lane folds into the row's node. It stays vertical down its own
+  column and bends at the destination row's center.
+
+**Eager first-parent collapse (the old rule 6) is removed.** It bent a branch away from its column
+right below its last commit, which drew the fork with the *inverted* angle: a branch that forks
+off main should visually leave main at the fork-point commit, not dive into main's column at its
+own tip. A lane now stays open — riding its own column — until its expected SHA is claimed, and
+folds in at that row via claim-time convergence (rule 2): the bend lands exactly on the fork
+point, the GitKraken-familiar shape. The cost is honest width: a branch holds its column down to
+its fork point, so width is bounded by branches *concurrently visible*, not concurrently alive.
+
+This also *simplifies* the incremental contract. Each transition is recorded (and drawn) exactly
+once, on the row whose half-interstice contains the bend; the rest of every edge is plain
+verticals already carried by `verticals`/own-column segments. No half ever lands on an
+already-emitted row, so the `pendingAbove` carry disappears from the `Frontier` and the sweep
+never mutates a previous page. `LayoutRow` gained `lineAbove`/`lineBelow` (does the own column
+connect straight up/down?) so tips carry no stub above the node, roots none below, and the node
+sits in a small clearance gap that keeps it legible over any row background.

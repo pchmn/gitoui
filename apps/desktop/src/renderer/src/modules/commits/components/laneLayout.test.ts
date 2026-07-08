@@ -23,6 +23,21 @@ function pick(row: LayoutRow) {
     verticals: row.verticals,
     above: row.above,
     below: row.below,
+    lineAbove: row.lineAbove,
+    lineBelow: row.lineBelow,
+  };
+}
+
+/** Shorthand for fixture rows: everything defaults to the plain mid-chain shape. */
+function layoutRow(overrides: Partial<ReturnType<typeof pick>> & { sha: string; col: number }) {
+  return {
+    isMerge: false,
+    verticals: [],
+    above: [],
+    below: [],
+    lineAbove: true,
+    lineBelow: true,
+    ...overrides,
   };
 }
 
@@ -32,9 +47,9 @@ describe('laneLayout', () => {
     const { rows, frontierOut } = laneLayout(commits);
 
     expect(rows.map(pick)).toEqual([
-      { sha: 'C', col: 0, isMerge: false, verticals: [], above: [], below: [] },
-      { sha: 'B', col: 0, isMerge: false, verticals: [], above: [], below: [] },
-      { sha: 'A', col: 0, isMerge: false, verticals: [], above: [], below: [] },
+      layoutRow({ sha: 'C', col: 0, lineAbove: false }),
+      layoutRow({ sha: 'B', col: 0 }),
+      layoutRow({ sha: 'A', col: 0, lineBelow: false }),
     ]);
     expect(frontierOut.lanes).toEqual([]);
   });
@@ -49,38 +64,23 @@ describe('laneLayout', () => {
     const { rows, frontierOut } = laneLayout(commits);
 
     expect(rows.map(pick)).toEqual([
-      {
+      layoutRow({
         sha: 'M',
         col: 0,
         isMerge: true,
-        verticals: [],
-        above: [],
+        lineAbove: false,
         below: [{ fromCol: 0, toCol: 1 }],
-      },
-      {
-        sha: 'B',
-        col: 0,
-        isMerge: false,
-        verticals: [1],
-        above: [{ fromCol: 0, toCol: 1 }],
-        below: [],
-      },
-      {
-        sha: 'F',
-        col: 1,
-        isMerge: false,
-        verticals: [0],
-        above: [],
-        below: [{ fromCol: 1, toCol: 0 }],
-      },
-      {
+      }),
+      layoutRow({ sha: 'B', col: 0, verticals: [1] }),
+      // F's lane stays open down to the fork point: even though lane 0 already expects A, no
+      // eager collapse happens here — the branch rides its own column and bends at A's row.
+      layoutRow({ sha: 'F', col: 1, verticals: [0] }),
+      layoutRow({
         sha: 'A',
         col: 0,
-        isMerge: false,
-        verticals: [],
+        lineBelow: false,
         above: [{ fromCol: 1, toCol: 0 }],
-        below: [],
-      },
+      }),
     ]);
     expect(frontierOut.lanes).toEqual([]);
   });
@@ -95,10 +95,10 @@ describe('laneLayout', () => {
     const { rows } = laneLayout(commits);
 
     expect(rows.map(pick)).toEqual([
-      { sha: 'T1', col: 0, isMerge: false, verticals: [], above: [], below: [] },
-      { sha: 'T2', col: 1, isMerge: false, verticals: [0], above: [], below: [] },
-      { sha: 'A1', col: 0, isMerge: false, verticals: [1], above: [], below: [] },
-      { sha: 'A2', col: 1, isMerge: false, verticals: [], above: [], below: [] },
+      layoutRow({ sha: 'T1', col: 0, lineAbove: false }),
+      layoutRow({ sha: 'T2', col: 1, verticals: [0], lineAbove: false }),
+      layoutRow({ sha: 'A1', col: 0, verticals: [1], lineBelow: false }),
+      layoutRow({ sha: 'A2', col: 1, lineBelow: false }),
     ]);
   });
 
@@ -107,23 +107,15 @@ describe('laneLayout', () => {
     const { rows } = laneLayout(commits);
 
     expect(rows.map(pick)).toEqual([
-      { sha: 'X', col: 1, isMerge: false, verticals: [], above: [], below: [] },
-      {
-        sha: 'H',
-        col: 0,
-        isMerge: false,
-        verticals: [1],
-        above: [],
-        below: [{ fromCol: 1, toCol: 0 }],
-      },
-      {
+      layoutRow({ sha: 'X', col: 1, lineAbove: false }),
+      layoutRow({ sha: 'H', col: 0, verticals: [1], lineAbove: false }),
+      // Both lanes expect A; X's lane rides its column down and bends into A — its fork point.
+      layoutRow({
         sha: 'A',
         col: 0,
-        isMerge: false,
-        verticals: [],
+        lineBelow: false,
         above: [{ fromCol: 1, toCol: 0 }],
-        below: [],
-      },
+      }),
     ]);
   });
 

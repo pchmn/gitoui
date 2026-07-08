@@ -23,6 +23,11 @@
   --color-chart-3: var(--chart-3);
   --color-chart-2: var(--chart-2);
   --color-chart-1: var(--chart-1);
+  --color-lane-5: var(--lane-5);
+  --color-lane-4: var(--lane-4);
+  --color-lane-3: var(--lane-3);
+  --color-lane-2: var(--lane-2);
+  --color-lane-1: var(--lane-1);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -82,6 +87,15 @@
   --chart-3: oklch(from var(--primary-source) 0.45 c calc(h + 120));
   --chart-4: oklch(from var(--primary-source) 0.6 c calc(h + 180));
   --chart-5: oklch(from var(--primary-source) 0.5 c calc(h + 240));
+  /* Graph lanes (DESIGN.md §Graph Lanes) — distinct from `--chart-*` (the shadcn contract). Chroma
+     follows the source but never drops below the 0.12 floor: the lanes are one of the five places
+     saturated color is *spent* (the Spent Color Rule), so they must read as nameable hues even
+     under the calm default source; lightness steps are non-monotonic on purpose. */
+  --lane-1: oklch(from var(--primary-source) 0.65 max(c, 0.12) h);
+  --lane-2: oklch(from var(--primary-source) 0.55 max(c, 0.12) calc(h + 60));
+  --lane-3: oklch(from var(--primary-source) 0.45 max(c, 0.12) calc(h + 120));
+  --lane-4: oklch(from var(--primary-source) 0.6 max(c, 0.12) calc(h + 180));
+  --lane-5: oklch(from var(--primary-source) 0.5 max(c, 0.12) calc(h + 240));
   --radius: 0.5rem;
   --sidebar: oklch(from var(--primary-source) 0.97 calc(c * 0.2) h);
   --sidebar-foreground: oklch(from var(--primary-source) 0.18 calc(c * 0.2) h);
@@ -117,6 +131,13 @@
   --chart-3: oklch(from var(--primary-source) 0.5 c calc(h + 120));
   --chart-4: oklch(from var(--primary-source) 0.65 c calc(h + 180));
   --chart-5: oklch(from var(--primary-source) 0.55 c calc(h + 240));
+  /* Lanes lift toward a luminous band in dark mode (adjacent steps still ≥ 0.10 apart, wrap
+     included) so they stay vivid on the dark canvas instead of muddying into it. */
+  --lane-1: oklch(from var(--primary-source) 0.78 max(c, 0.12) h);
+  --lane-2: oklch(from var(--primary-source) 0.65 max(c, 0.12) calc(h + 60));
+  --lane-3: oklch(from var(--primary-source) 0.55 max(c, 0.12) calc(h + 120));
+  --lane-4: oklch(from var(--primary-source) 0.72 max(c, 0.12) calc(h + 180));
+  --lane-5: oklch(from var(--primary-source) 0.6 max(c, 0.12) calc(h + 240));
   --sidebar: oklch(from var(--primary-source) 0.21 calc(c * 0.25) h);
   --sidebar-foreground: oklch(from var(--primary-source) 0.94 calc(c * 0.15) h);
   --sidebar-primary: oklch(from var(--primary-source) max(l, 0.72) c h);
