@@ -178,6 +178,35 @@ describe('ChangesPanel groups', () => {
     expect(unstagedGroup.textContent).toMatch(/−2/);
   });
 
+  it('omits a zero axis and tints the added/deleted glyphs', async () => {
+    const entries: StatusEntry[] = [
+      { path: 'src/added.ts', staged: { kind: 'added', additions: 12, deletions: 0 } },
+      { path: 'src/removed.ts', unstaged: { kind: 'deleted', additions: 0, deletions: 7 } },
+    ];
+    render(<Wrapper statusMock={() => Promise.resolve(makeStatus({ entries }))} />);
+
+    await screen.findByText('added.ts');
+    // A one-sided change shows only its moved axis — no `+0` / `−0` noise.
+    expect(screen.getByText('+12')).toBeTruthy();
+    expect(screen.getByText('−7')).toBeTruthy();
+    expect(screen.queryByText('−0')).toBeNull();
+    expect(screen.queryByText('+0')).toBeNull();
+
+    // The glyph square carries its kind and the semantic tint (color spent on the add/delete case).
+    const addedGlyph = screen
+      .getByText('added.ts')
+      .closest('[role="option"]')
+      ?.querySelector('[data-kind]');
+    expect(addedGlyph?.getAttribute('data-kind')).toBe('added');
+    expect(addedGlyph?.className).toContain('text-success');
+    const removedGlyph = screen
+      .getByText('removed.ts')
+      .closest('[role="option"]')
+      ?.querySelector('[data-kind]');
+    expect(removedGlyph?.getAttribute('data-kind')).toBe('deleted');
+    expect(removedGlyph?.className).toContain('text-destructive');
+  });
+
   it('omits stats for untracked and binary entries', async () => {
     const entries: StatusEntry[] = [
       { path: 'new-file.ts', unstaged: { kind: 'untracked' } },

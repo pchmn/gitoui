@@ -2,10 +2,19 @@ import { createContext, type ReactNode, useContext, useEffect, useMemo, useState
 import { useActiveRepository } from '#renderer/modules/repository/ActiveRepositoryContext';
 
 /**
- * UI selection state for the Commit graph (issue #46): the selected Commit's SHA, held in one
- * place. It is the seam the future Commit-detail view, route, and "launch the app on a specific
- * Commit" deep-link will read from — one serializable identifier (the SHA), in one location, not
- * state scattered across components.
+ * What the Commit graph has selected (issue #66): a specific Commit (by SHA) or the dirty Working
+ * tree (the WIP row) — `null` when nothing is selected. One serializable value, held in one place:
+ * it is the seam the Commit-detail view, route, and "launch the app on a specific Commit" deep-link
+ * read from, and the WIP row / Changes-mode anchor the Inspector reads from. For the Inspector,
+ * `workingTree` and `null` are equivalent (both Changes mode) — Commit detail shows only for
+ * `kind: 'commit'`.
+ */
+export type CommitSelection =
+  | { readonly kind: 'commit'; readonly sha: string }
+  | { readonly kind: 'workingTree' };
+
+/**
+ * UI selection state for the Commit graph, held in one place.
  *
  * Distinct from `RailSelection` (`SelectionContext`): focusing a rail row and selecting a Commit in
  * the graph are different axes — they are never merged.
@@ -14,24 +23,24 @@ import { useActiveRepository } from '#renderer/modules/repository/ActiveReposito
  * `SelectionContext`'s reset-on-repo-change).
  */
 type CommitSelectionContextValue = {
-  readonly selectedSha: string | null;
-  readonly selectCommit: (sha: string | null) => void;
+  readonly selection: CommitSelection | null;
+  readonly select: (selection: CommitSelection | null) => void;
 };
 
 const CommitSelectionContext = createContext<CommitSelectionContextValue | undefined>(undefined);
 
 export function CommitSelectionProvider({ children }: { children: ReactNode }) {
   const { root } = useActiveRepository();
-  const [selectedSha, setSelectedSha] = useState<string | null>(null);
+  const [selection, setSelection] = useState<CommitSelection | null>(null);
 
   // Reset selection when the active repository changes.
   useEffect(() => {
-    setSelectedSha(null);
+    setSelection(null);
   }, [root]);
 
   const value = useMemo<CommitSelectionContextValue>(
-    () => ({ selectedSha, selectCommit: setSelectedSha }),
-    [selectedSha],
+    () => ({ selection, select: setSelection }),
+    [selection],
   );
 
   return (

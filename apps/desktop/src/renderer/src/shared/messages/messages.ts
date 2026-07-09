@@ -86,6 +86,15 @@ export const messages = {
     loadingMore: 'Loading more commits…',
     endOfHistory: 'End of history',
     retry: 'Retry',
+    // The WIP row — the dirty Working tree as a synthetic top row (issue #66). No pill: the dotted
+    // node + a persistent stronger row tint mark it, and this subject names it plainly. No timestamp
+    // (it's always "now"); the trailing slot shows the change summary (file counts + `+N −N`).
+    wipSubject: 'Uncommitted changes',
+  },
+  commitDetail: {
+    // Minimal seam copy (issue #66) — the full Commit-detail body lands in its own slice.
+    heading: 'Commit',
+    placeholder: 'Commit detail coming soon.',
   },
   branchSelector: {
     filterPlaceholder: 'Filter branches…',

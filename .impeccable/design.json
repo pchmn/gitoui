@@ -83,9 +83,9 @@
       "name": "Ref Pill",
       "kind": "chip",
       "refersTo": "ref-pill",
-      "description": "Branch / tag marker. Tiny, quiet, scannable. WIP/HEAD take a stronger tint.",
-      "html": "<span class=\"ds-ref-pill\">main</span><span class=\"ds-ref-pill ds-ref-pill--wip\">WIP</span>",
-      "css": ".ds-ref-pill{display:inline-flex;align-items:center;height:16px;padding:0 6px;margin-right:6px;font-family:'DM Sans Variable',sans-serif;font-size:.625rem;font-weight:500;letter-spacing:.01em;color:oklch(0.180 0.0131 50.6);background:oklch(0.930 0.0197 50.6);border-radius:.3rem;}.ds-ref-pill--wip{color:oklch(0.970 0.0033 50.6);background:oklch(0.577 0.245 27.325);}"
+      "description": "Branch / tag marker. Tiny, quiet, scannable. The active branch and Detached HEAD take a stronger tint.",
+      "html": "<span class=\"ds-ref-pill\">main</span><span class=\"ds-ref-pill ds-ref-pill--strong\">HEAD</span>",
+      "css": ".ds-ref-pill{display:inline-flex;align-items:center;height:16px;padding:0 6px;margin-right:6px;font-family:'DM Sans Variable',sans-serif;font-size:.625rem;font-weight:500;letter-spacing:.01em;color:oklch(0.180 0.0131 50.6);background:oklch(0.930 0.0197 50.6);border-radius:.3rem;}.ds-ref-pill--strong{color:oklch(0.527 0.0656 50.6);background:color-mix(in srgb, oklch(0.527 0.0656 50.6) 15%, oklch(0.990 0.0098 50.6));}"
     },
     {
       "name": "Toast",
@@ -99,9 +99,9 @@
       "name": "Change Row",
       "kind": "custom",
       "refersTo": null,
-      "description": "Dense single-line list row (repository rail, branches, changes). Never boxed: separated by tone, not borders.",
-      "html": "<div class=\"ds-row\"><span class=\"ds-row__dot\"></span><span class=\"ds-row__name\">src/api/payment.ts</span><span class=\"ds-row__stat\"><span class=\"ds-add\">+24</span> <span class=\"ds-del\">−6</span></span></div>",
-      "css": ".ds-row{display:flex;align-items:center;gap:8px;height:28px;padding:0 8px;border-radius:.3rem;font-family:'DM Sans Variable',sans-serif;font-size:.75rem;color:oklch(0.180 0.0131 50.6);cursor:default;transition:background .12s ease;}.ds-row:hover{background:oklch(0.950 0.0131 50.6);}.ds-row__dot{width:6px;height:6px;border-radius:50%;background:oklch(0.527 0.0656 50.6);flex:none;}.ds-row__name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.ds-row__stat{font-size:.625rem;font-weight:500;font-variant-numeric:tabular-nums;}.ds-add{color:oklch(0.55 0.13 150);}.ds-del{color:oklch(0.577 0.245 27.325);}"
+      "description": "Dense single-line file row in the Inspector's Changes panel: a leading small status ICON (pencil = modified, plus = added, minus = deleted; color spent only on added/deleted, per the Spent Color Rule), then GitKraken-style the Muted-Ink directory path on the left (truncating head-first) and the Body-size filename (medium weight) on the right, so the filename is what you scan (it ellipsizes only if it alone overruns the row). The `+N` / `−N` Micro stats (a zero side omitted) reveal on hover/focus, absolutely placed so they never shift the filename — the resting row stays quiet. Never boxed: separated by tone, not borders. A future preference may swap the icons back to M/A/D letters.",
+      "html": "<div class=\"ds-change\"><span class=\"ds-change__glyph\">✎</span><span class=\"ds-change__id\"><span class=\"ds-change__path\">apps/desktop/src/renderer/src/modules/changes</span><span class=\"ds-change__sep\">/</span><span class=\"ds-change__name\">ChangeRow.tsx</span></span><span class=\"ds-change__stat\"><span class=\"ds-add\">+24</span> <span class=\"ds-del\">−6</span></span></div>",
+      "css": ".ds-change{display:flex;align-items:center;gap:8px;height:28px;padding:0 12px;border-radius:.3rem;font-family:'DM Sans Variable',sans-serif;font-size:.875rem;color:oklch(0.180 0.0131 50.6);cursor:default;transition:background .12s ease;}.ds-change:hover{background:oklch(0.950 0.0131 50.6);}.ds-change__glyph{flex:none;font-size:.8125rem;line-height:1;color:oklch(0.500 0.0197 50.6);}.ds-change__id{display:flex;min-width:0;flex:1;align-items:baseline;}.ds-change__path{min-width:0;color:oklch(0.500 0.0197 50.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.ds-change__sep{flex:none;color:oklch(0.500 0.0197 50.6);}.ds-change__name{flex:none;font-weight:500;}.ds-change__stat{flex:none;font-size:.625rem;font-weight:500;font-variant-numeric:tabular-nums;}.ds-add{color:oklch(0.577 0.19 142.5);}.ds-del{color:oklch(0.577 0.245 27.325);}"
     },
     {
       "name": "Commit Graph Row",
