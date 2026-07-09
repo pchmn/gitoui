@@ -7,10 +7,15 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { useEffect } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  CommitSelectionProvider,
+  useCommitSelection,
+} from '#renderer/modules/commits/CommitSelectionContext';
+import {
   ActiveRepositoryProvider,
   useActiveRepository,
 } from '#renderer/modules/repository/ActiveRepositoryContext';
 import { AppShell } from './AppShell';
+import { Inspector } from './Inspector';
 
 afterEach(() => {
   cleanup();
@@ -79,6 +84,67 @@ describe('Inspector visibility', () => {
     // Base UI's Tab keeps a disabled tab focusable-but-inert (`focusableWhenDisabled`), so it
     // marks `aria-disabled`/`data-disabled` rather than the native `disabled` attribute.
     expect(treeTab.getAttribute('aria-disabled')).toBe('true');
+  });
+});
+
+/**
+ * Drives the graph selection directly so the Inspector's Changes ⇄ Commit-detail split can be
+ * tested without clicking through the virtualized graph. Mounts `<Inspector/>` beside the buttons,
+ * under the same provider tree the app uses.
+ */
+function ModeHarness() {
+  const { select } = useCommitSelection();
+  return (
+    <div>
+      <button type='button' onClick={() => select({ kind: 'commit', sha: 'deadbeef123' })}>
+        pick-commit
+      </button>
+      <button type='button' onClick={() => select({ kind: 'workingTree' })}>
+        pick-working-tree
+      </button>
+      <button type='button' onClick={() => select(null)}>
+        clear
+      </button>
+      <Inspector />
+    </div>
+  );
+}
+
+function ModeWrapper() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ActiveRepositoryProvider>
+        <RootSetter root='/repo' />
+        <CommitSelectionProvider>
+          <ModeHarness />
+        </CommitSelectionProvider>
+      </ActiveRepositoryProvider>
+    </QueryClientProvider>
+  );
+}
+
+describe('Inspector mode switch', () => {
+  it('shows Changes for no selection / Working tree, and Commit detail for a Commit', async () => {
+    render(<ModeWrapper />);
+
+    // No selection → Changes mode (tabs + the clean-tree state from the stubbed status).
+    expect(await screen.findByText('Changes')).toBeTruthy();
+    expect(await screen.findByText('Clean working tree')).toBeTruthy();
+
+    // Commit selected → Commit detail (the short SHA), and the tabs are gone.
+    fireEvent.click(screen.getByText('pick-commit'));
+    expect(await screen.findByText('deadbee')).toBeTruthy();
+    expect(screen.queryByRole('tab', { name: 'Changes' })).toBeNull();
+
+    // Working-tree selection is equivalent to no selection for the Inspector — back to Changes.
+    fireEvent.click(screen.getByText('pick-working-tree'));
+    expect(await screen.findByRole('tab', { name: 'Changes' })).toBeTruthy();
+    expect(screen.queryByText('deadbee')).toBeNull();
+
+    // Clearing the selection stays in Changes mode.
+    fireEvent.click(screen.getByText('clear'));
+    expect(await screen.findByRole('tab', { name: 'Changes' })).toBeTruthy();
   });
 });
 

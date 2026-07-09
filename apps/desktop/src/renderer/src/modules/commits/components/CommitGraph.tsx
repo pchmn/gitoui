@@ -1,9 +1,11 @@
-import type { Commit, Ref } from '@gitoui/contracts/git';
+import type { Commit, Ref, StatusEntry } from '@gitoui/contracts/git';
 import { IdentityAvatar } from '@gitoui/ui/identity-avatar';
 import { cn } from '@gitoui/ui/lib/utils';
 import { RefPill } from '@gitoui/ui/ref-pill';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
+import { CHANGE_ICON, CHANGE_TONE } from '#renderer/modules/changes/components/changeGlyph';
+import { useStatus } from '#renderer/modules/changes/hooks/useStatus';
 import { useCommitSelection } from '#renderer/modules/commits/CommitSelectionContext';
 import type { GitError } from '#renderer/shared/git/errors';
 import { messages } from '#renderer/shared/messages/messages';
@@ -171,6 +173,39 @@ function useLaneLayout(commits: readonly LayoutCommit[]): LayoutRow[] {
 /** Stable empty array so `useLaneLayout` doesn't see a "new" input every render while loading. */
 const NO_COMMITS: readonly LayoutCommit[] = [];
 
+/**
+ * The WIP row's change summary (issue #66) in one pass over the Status:
+ *
+ * - **File counts by type** — how many files, grouped `modified` (incl. renamed) / `added` (incl.
+ *   untracked) / `deleted`. Each entry is one path counted once, by its working-tree face (the
+ *   Unstaged kind if present, else the Staged one) — so the buckets sum to the changed-file count.
+ * - **Aggregate lines** `+N −N` — the sum of every per-axis `additions` / `deletions`, BOTH axes,
+ *   so a path Staged AND Unstaged contributes twice, exactly as the Inspector's panel counts it (a
+ *   both-axes path shows one row per group). Entries without stats (binary, untracked) add 0.
+ */
+function summarizeWip(entries: readonly StatusEntry[] | undefined): {
+  additions: number;
+  deletions: number;
+  modified: number;
+  added: number;
+  deleted: number;
+} {
+  let additions = 0;
+  let deletions = 0;
+  let modified = 0;
+  let added = 0;
+  let deleted = 0;
+  for (const entry of entries ?? []) {
+    additions += (entry.staged?.additions ?? 0) + (entry.unstaged?.additions ?? 0);
+    deletions += (entry.staged?.deletions ?? 0) + (entry.unstaged?.deletions ?? 0);
+    const kind = entry.unstaged?.kind ?? entry.staged?.kind;
+    if (kind === 'deleted') deleted++;
+    else if (kind === 'added' || kind === 'untracked') added++;
+    else modified++;
+  }
+  return { additions, deletions, modified, added, deleted };
+}
+
 /** The armed hover: which run is lifted. */
 type HoverState = {
   runId: number;
@@ -206,13 +241,23 @@ export function CommitGraph({ root }: { root: string }) {
     fetchNextPage,
     retry,
   } = useCommits(root);
-  const { selectedSha, selectCommit } = useCommitSelection();
+  const { selection, select } = useCommitSelection();
+
+  // The dirty Working tree as a synthetic top row (issue #66): fed from the SAME status collection
+  // the Inspector reads, so the row and the panel never disagree. Purely presentational — it never
+  // enters the lane sweep or the frontier (below); it just overlays the lane renderer above row 0.
+  const { data: status } = useStatus(root);
+  const wip = useMemo(() => summarizeWip(status?.entries), [status?.entries]);
+  const hasWip = (status?.entries.length ?? 0) > 0;
 
   const layoutRows = useLaneLayout(commits ?? NO_COMMITS);
   const maxLaneCol = useMemo(() => maxLaneColumn(layoutRows), [layoutRows]);
   const lanesWidth = (maxLaneCol + 1) * LANE_PITCH;
   const lanesViewportWidth = Math.min(lanesWidth, LANES_MAX_WIDTH_PX);
   const lanesOverflow = lanesWidth > LANES_MAX_WIDTH_PX;
+  // The WIP node rides the HEAD Commit's lane column (row 0's own column) so its short dashed
+  // connector drops straight into row 0's node; column 0 is the fallback before any row loads.
+  const headCol = layoutRows[0]?.col ?? 0;
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const lanesScrollRef = useRef<HTMLDivElement>(null);
@@ -259,6 +304,10 @@ export function CommitGraph({ root }: { root: string }) {
     [hoveredRun],
   );
   const rowCount = commits?.length ?? 0;
+  // The WIP row is prepended above the virtualized list in normal flow, so the list starts one row
+  // height down: `scrollMargin` tells the virtualizer that offset (its item `start`s absorb it, its
+  // `getTotalSize` doesn't) so the range math stays exact rather than leaning on overscan slack.
+  const wipOffset = hasWip ? ROW_HEIGHT_PX : 0;
   // One extra virtual row for the discreet loader / end-of-history terminus, shown only when there's
   // something to say — an idle "more pages available, not fetching yet" state renders nothing.
   const showFooterRow = isFetchingNextPage || !hasNextPage;
@@ -267,6 +316,7 @@ export function CommitGraph({ root }: { root: string }) {
     getScrollElement: () => scrollRef.current,
     estimateSize: () => ROW_HEIGHT_PX,
     overscan: 10,
+    scrollMargin: wipOffset,
   });
   const virtualItems = virtualizer.getVirtualItems();
 
@@ -296,6 +346,19 @@ export function CommitGraph({ root }: { root: string }) {
       fetchNextPage();
     }
   }, [virtualItems, rowCount, hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  // Esc clears the selection (issue #66) — graph-level, so it works wherever focus sits once a row
+  // is selected. Only armed while something IS selected, and it stands down for an already-handled
+  // Esc (`defaultPrevented`): the Code & Diff slice layers its own Esc-to-close ahead of this one,
+  // so closing the diff never also drops the selection in the same keystroke (cascade).
+  useEffect(() => {
+    if (selection === null) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape' && !event.defaultPrevented) select(null);
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [selection, select]);
 
   // Loading state — show skeleton rows, no spinner. Only without data: growing the loaded window
   // recompiles the live query, and the already-loaded rows must keep showing through it.
@@ -348,6 +411,16 @@ export function CommitGraph({ root }: { root: string }) {
         if (proxy) proxy.scrollLeft += e.deltaX;
       }}
     >
+      {hasWip && (
+        <WipRow
+          col={headCol}
+          lanesWidth={lanesWidth}
+          lanesViewportWidth={lanesViewportWidth}
+          summary={wip}
+          selected={selection?.kind === 'workingTree'}
+          onSelect={() => select({ kind: 'workingTree' })}
+        />
+      )}
       <ul
         className='relative w-full'
         style={{ height: virtualizer.getTotalSize() }}
@@ -360,7 +433,10 @@ export function CommitGraph({ root }: { root: string }) {
             left: 0,
             width: '100%',
             height: virtualRow.size,
-            transform: `translateY(${virtualRow.start}px)`,
+            // `start` is measured from the scroll container's top (it includes `scrollMargin`); the
+            // `<ul>` itself already sits `scrollMargin` down (below the WIP row), so subtract it to
+            // place items relative to the list's own top.
+            transform: `translateY(${virtualRow.start - virtualizer.options.scrollMargin}px)`,
           };
 
           // The trailing virtual row (only present when `showFooterRow`) carries the load-more
@@ -385,7 +461,7 @@ export function CommitGraph({ root }: { root: string }) {
           if (!commit || !layoutRow) return null;
 
           const sha = commit.sha;
-          const isRowSelected = sha === selectedSha;
+          const isRowSelected = selection?.kind === 'commit' && selection.sha === sha;
           const isRunMember = hoveredCommitRows?.has(virtualRow.index) ?? false;
           // While a run is hovered, only its own Commits stay fully legible — the other rows'
           // subject + author recede a touch so the branch reads as the foreground set.
@@ -401,7 +477,7 @@ export function CommitGraph({ root }: { root: string }) {
           const rowRun = runAt(runs, virtualRow.index, layoutRow.col);
 
           function handleSelect() {
-            selectCommit(sha);
+            select({ kind: 'commit', sha });
           }
 
           // Arm with intent when nothing is highlighted yet. Once armed, staying on the SAME run
@@ -537,6 +613,10 @@ export function CommitGraph({ root }: { root: string }) {
                   width={lanesWidth}
                   highlightCol={highlightCol}
                   dimmed={hover !== null}
+                  // The dashed WIP connector continues into row 0's node: the WIP row draws the
+                  // top half, this row draws from its top edge down to its own node so the dots
+                  // run unbroken from the WIP node into the first Commit (issue #66).
+                  wipConnector={hasWip && virtualRow.index === 0}
                 />
               </span>
               <span
@@ -623,11 +703,13 @@ function GraphLanesRow({
   width,
   highlightCol = null,
   dimmed = false,
+  wipConnector = false,
 }: {
   row: LayoutRow;
   width: number;
   highlightCol?: number | null;
   dimmed?: boolean;
+  wipConnector?: boolean;
 }) {
   const half = ROW_HEIGHT_PX / 2;
   const nodeX = laneX(row.col);
@@ -663,6 +745,19 @@ function GraphLanesRow({
           data-col={col}
         />
       ))}
+      {wipConnector && !row.lineAbove && (
+        <line
+          x1={nodeX}
+          y1={0}
+          x2={nodeX}
+          y2={half - NODE_CLEARANCE}
+          stroke={laneColor(row.col)}
+          strokeWidth={STROKE_WIDTH}
+          strokeDasharray='2 3'
+          data-slot='wip-connector'
+          data-half='top'
+        />
+      )}
       {row.lineAbove && (
         <line
           x1={nodeX}
@@ -743,6 +838,151 @@ function GraphLanesRow({
         />
       )}
     </svg>
+  );
+}
+
+/** A file-count chip for the WIP summary: the shared change icon + a count, tinted per bucket. */
+function WipCount({ kind, count }: { kind: 'modified' | 'added' | 'deleted'; count: number }) {
+  const Icon = CHANGE_ICON[kind];
+  return (
+    <span
+      className={cn('flex items-center gap-0.5', CHANGE_TONE[kind])}
+      data-slot='wip-filecount'
+      data-kind={kind}
+    >
+      <Icon className='size-3' weight='duotone' />
+      {count}
+    </span>
+  );
+}
+
+/**
+ * The WIP row (issue #66): the dirty Working tree as a synthetic top row, mirroring a Commit row's
+ * columns — no ref pill (the dotted node + a persistent stronger tint carry it), a HOLLOW DASHED
+ * node in the HEAD Commit's lane column with a short dashed connector dropping toward row 0 (a purely
+ * presentational overlay, never part of the lane sweep or frontier), the "Uncommitted changes"
+ * subject, and — where a Commit row shows author + time — its change **summary**: file counts by
+ * type (the same icons as the Changes panel) and the aggregate `+N −N` lines. No timestamp: the row
+ * is always "now". Selecting it anchors the Inspector's Changes mode; selected styling mirrors a
+ * Commit row's (the strongest tint step).
+ */
+function WipRow({
+  col,
+  lanesWidth,
+  lanesViewportWidth,
+  summary,
+  selected,
+  onSelect,
+}: {
+  col: number;
+  lanesWidth: number;
+  lanesViewportWidth: number;
+  summary: {
+    additions: number;
+    deletions: number;
+    modified: number;
+    added: number;
+    deleted: number;
+  };
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const { additions, deletions, modified, added, deleted } = summary;
+  const half = ROW_HEIGHT_PX / 2;
+  const nodeX = laneX(col);
+  const laneCol = laneColor(col);
+
+  return (
+    // A native button: focus + Enter/Space activation for free, and it reads as the Working-tree
+    // selection anchor to assistive tech (`aria-label`, since the row's own text is stats noise).
+    <button
+      type='button'
+      style={
+        {
+          // The live Working-tree state sits a step above the resting graph at all times: its base
+          // tint is the run-member step (not the 6% rest), so the row reads as "current" even when
+          // nothing is selected (DESIGN.md — "the current row is highlighted with a stronger tint").
+          // Hover and selection escalate exactly like a Commit row.
+          '--row-tint': `color-mix(in oklab, ${laneCol} ${ROW_TINT_MEMBER}%, transparent)`,
+          '--row-tint-hover': `color-mix(in oklab, ${laneCol} ${ROW_TINT_HOVER}%, transparent)`,
+          '--row-tint-selected': `color-mix(in oklab, ${laneCol} ${ROW_TINT_SELECTED}%, transparent)`,
+        } as CSSProperties
+      }
+      className={cn(
+        'group relative flex h-8 w-full cursor-default items-center gap-3 border-b border-border/50 px-3 text-left text-xs',
+        selected ? 'bg-(--row-tint-selected)' : 'bg-(--row-tint) hover:bg-(--row-tint-hover)',
+      )}
+      data-slot='wip-row'
+      data-selected={selected}
+      aria-label={messages.commitGraph.wipSubject}
+      onClick={onSelect}
+    >
+      {/* Empty REFS zone — the WIP row wears no pill (the dotted node + the persistent stronger
+          tint carry it; "WIP" is dev jargon the subject already says plainly). Its fixed width keeps
+          the lanes zone at the same origin as every Commit row. */}
+      <span className='shrink-0' style={{ width: REFS_ZONE_WIDTH_PX }} aria-hidden='true' />
+      <span
+        className='shrink-0 overflow-hidden'
+        style={{ width: lanesViewportWidth }}
+        data-slot='lanes-viewport'
+      >
+        <svg
+          width={lanesWidth}
+          height={ROW_HEIGHT_PX}
+          viewBox={`0 0 ${lanesWidth} ${ROW_HEIGHT_PX}`}
+          className='block'
+          style={{ transform: 'translateX(var(--lanes-scroll, 0px))' }}
+          aria-hidden='true'
+          data-slot='lane-graph'
+        >
+          {/* Short dashed connector dropping toward row 0's node in the same column. */}
+          <line
+            x1={nodeX}
+            y1={half + NODE_CLEARANCE}
+            x2={nodeX}
+            y2={ROW_HEIGHT_PX}
+            stroke={laneCol}
+            strokeWidth={STROKE_WIDTH}
+            strokeDasharray='2 3'
+            data-slot='wip-connector'
+          />
+          {/* Hollow, dashed node — distinct from a Commit's filled dot and a merge's solid ring. */}
+          <circle
+            cx={nodeX}
+            cy={half}
+            r={NODE_RADIUS}
+            fill='none'
+            stroke={laneCol}
+            strokeWidth={STROKE_WIDTH}
+            strokeDasharray='1.75 1.75'
+            data-slot='wip-node'
+          />
+        </svg>
+      </span>
+      <span className='min-w-0 flex-1 truncate font-medium'>{messages.commitGraph.wipSubject}</span>
+      {/* Change summary: file counts by type, then a hairline dot, then the aggregate lines. Any
+          zero bucket / axis is omitted. No timestamp — the WIP row is always "now". */}
+      <span className='flex shrink-0 items-center gap-2 font-mono text-[0.625rem] tabular-nums'>
+        {(modified > 0 || added > 0 || deleted > 0) && (
+          <span className='flex items-center gap-2'>
+            {modified > 0 && <WipCount kind='modified' count={modified} />}
+            {added > 0 && <WipCount kind='added' count={added} />}
+            {deleted > 0 && <WipCount kind='deleted' count={deleted} />}
+          </span>
+        )}
+        {(additions > 0 || deletions > 0) && (
+          <>
+            <span aria-hidden='true' className='text-muted-foreground/40'>
+              ·
+            </span>
+            <span className='flex items-center gap-1.5'>
+              {additions > 0 && <span className='text-success'>+{additions}</span>}
+              {deletions > 0 && <span className='text-destructive'>−{deletions}</span>}
+            </span>
+          </>
+        )}
+      </span>
+    </button>
   );
 }
 

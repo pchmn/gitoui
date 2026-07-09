@@ -2,7 +2,7 @@
  * @vitest-environment happy-dom
  */
 
-import type { Commit } from '@gitoui/contracts/git';
+import type { Commit, Status } from '@gitoui/contracts/git';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
@@ -70,14 +70,22 @@ function makeCommitPage(count: number, startAt: number): Commit[] {
 
 type ListCommitsArgs = { repoPath: string; skip?: number; limit?: number };
 
+/** A clean Working tree — the default so `useStatus` finds no WIP row unless a test asks for one. */
+const CLEAN_STATUS: Status = { branch: 'main', ahead: 0, behind: 0, entries: [] };
+
 function Wrapper({
   root = '/repo',
   listCommitsMock,
+  statusMock,
 }: {
   root?: string;
   listCommitsMock: (args: ListCommitsArgs) => Promise<readonly Commit[]>;
+  statusMock?: () => Promise<Status>;
 }) {
-  vi.stubGlobal('git', { listCommits: vi.fn(listCommitsMock) });
+  vi.stubGlobal('git', {
+    listCommits: vi.fn(listCommitsMock),
+    status: vi.fn(statusMock ?? (() => Promise.resolve(CLEAN_STATUS))),
+  });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
     <QueryClientProvider client={queryClient}>
@@ -310,6 +318,7 @@ describe('CommitGraph freshness', () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     vi.stubGlobal('git', {
       listCommits: vi.fn(({ repoPath }: { repoPath: string }) => Promise.resolve(byRepo[repoPath])),
+      status: vi.fn(() => Promise.resolve(CLEAN_STATUS)),
     });
 
     const { rerender } = render(
@@ -338,7 +347,10 @@ describe('CommitGraph freshness', () => {
   it('refreshes the list when the commits query is invalidated', async () => {
     let head: Commit[] = [makeCommit({ sha: 'before', subject: 'on the old branch' })];
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    vi.stubGlobal('git', { listCommits: vi.fn(() => Promise.resolve(head)) });
+    vi.stubGlobal('git', {
+      listCommits: vi.fn(() => Promise.resolve(head)),
+      status: vi.fn(() => Promise.resolve(CLEAN_STATUS)),
+    });
 
     render(
       <QueryClientProvider client={queryClient}>
@@ -367,7 +379,10 @@ describe('CommitGraph freshness', () => {
       if ((skip ?? 0) === 0) return Promise.resolve(head);
       return Promise.resolve(makeCommitPage(10, 1_000)); // the second page of the new (full) HEAD.
     });
-    vi.stubGlobal('git', { listCommits: listCommitsMock });
+    vi.stubGlobal('git', {
+      listCommits: listCommitsMock,
+      status: vi.fn(() => Promise.resolve(CLEAN_STATUS)),
+    });
 
     render(
       <QueryClientProvider client={queryClient}>
@@ -399,6 +414,7 @@ describe('CommitGraph freshness', () => {
       listCommits: vi.fn(({ skip }: ListCommitsArgs) =>
         Promise.resolve((skip ?? 0) === 0 ? head : []),
       ),
+      status: vi.fn(() => Promise.resolve(CLEAN_STATUS)),
     });
 
     render(
@@ -723,5 +739,109 @@ describe('CommitGraph lanes', () => {
     const spacer = proxy?.firstElementChild as HTMLElement | null;
     expect(Number.parseInt(spacer?.style.width ?? '0', 10)).toBe(svgWidth);
     expect(Number.parseInt(proxy?.style.width ?? '0', 10)).toBe(viewportWidth);
+  });
+});
+
+describe('CommitGraph WIP row', () => {
+  // A dirty Working tree: one Staged (+3 −1) and one Unstaged (+1 −1) axis — the WIP row's
+  // aggregate sums BOTH axes, so +4 −2 (issue #66). Entries without stats would add 0.
+  const dirtyStatus: Status = {
+    branch: 'main',
+    ahead: 0,
+    behind: 0,
+    entries: [
+      { path: 'src/a.ts', staged: { kind: 'modified', additions: 3, deletions: 1 } },
+      { path: 'src/b.ts', unstaged: { kind: 'added', additions: 1, deletions: 1 } },
+    ],
+  };
+
+  it('renders a WIP row with a dashed node and both-axes aggregate stats when dirty', async () => {
+    render(
+      <Wrapper
+        listCommitsMock={() =>
+          Promise.resolve([makeCommit({ sha: 'a1', subject: 'feat: add engine' })])
+        }
+        statusMock={() => Promise.resolve(dirtyStatus)}
+      />,
+    );
+
+    const subject = await screen.findByText('Uncommitted changes');
+    const wipRow = subject.closest('[data-slot="wip-row"]') as HTMLElement | null;
+    expect(wipRow).not.toBeNull();
+    if (!wipRow) throw new Error('WIP row not found');
+
+    // No "WIP" pill (the node + tint carry it) and no "now" timestamp (the row is always now).
+    expect(within(wipRow).queryByText('WIP')).toBeNull();
+    expect(within(wipRow).queryByText('now')).toBeNull();
+    // Change summary: file counts by type (1 modified staged, 1 added unstaged) AND aggregate lines.
+    const modifiedCount = wipRow.querySelector('[data-slot="wip-filecount"][data-kind="modified"]');
+    const addedCount = wipRow.querySelector('[data-slot="wip-filecount"][data-kind="added"]');
+    expect(modifiedCount?.textContent).toContain('1');
+    expect(addedCount?.textContent).toContain('1');
+    expect(wipRow.querySelector('[data-slot="wip-filecount"][data-kind="deleted"]')).toBeNull();
+    expect(within(wipRow).getByText('+4')).toBeTruthy();
+    expect(within(wipRow).getByText('−2')).toBeTruthy();
+
+    // A hollow, dashed node in the HEAD Commit's lane column — distinct from a Commit's filled dot
+    // and a merge's solid ring — with a short dashed connector dropping toward row 0.
+    const node = wipRow.querySelector('circle[data-slot="wip-node"]');
+    expect(node?.getAttribute('fill')).toBe('none');
+    expect(node?.getAttribute('stroke-dasharray')).toBeTruthy();
+    expect(node?.getAttribute('stroke')).toMatch(/^var\(--lane-[1-5]\)$/);
+    expect(
+      wipRow.querySelector('line[data-slot="wip-connector"]')?.getAttribute('stroke-dasharray'),
+    ).toBeTruthy();
+  });
+
+  it('renders no WIP row when the Working tree is clean', async () => {
+    render(
+      <Wrapper
+        listCommitsMock={() => Promise.resolve([makeCommit({ subject: 'feat: add engine' })])}
+        statusMock={() => Promise.resolve(CLEAN_STATUS)}
+      />,
+    );
+
+    await screen.findByText('feat: add engine');
+    expect(document.querySelector('[data-slot="wip-row"]')).toBeNull();
+    expect(screen.queryByText('Uncommitted changes')).toBeNull();
+  });
+
+  it('selects the Working tree on click, moves to a Commit, and clears on Esc', async () => {
+    render(
+      <Wrapper
+        listCommitsMock={() =>
+          Promise.resolve([makeCommit({ sha: 'a1', subject: 'feat: add engine' })])
+        }
+        statusMock={() => Promise.resolve(dirtyStatus)}
+      />,
+    );
+
+    const wipRow = (await screen.findByText('Uncommitted changes')).closest(
+      '[data-slot="wip-row"]',
+    ) as HTMLElement;
+    const commitRow = screen.getByText('feat: add engine').closest('li') as HTMLElement;
+    expect(wipRow.getAttribute('data-selected')).toBe('false');
+    expect(commitRow.getAttribute('data-selected')).toBe('false');
+
+    // Click the WIP row → it selects (Changes-mode anchor).
+    await act(async () => {
+      wipRow.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(wipRow.getAttribute('data-selected')).toBe('true');
+    expect(commitRow.getAttribute('data-selected')).toBe('false');
+
+    // Selecting a Commit moves the selection off the WIP row.
+    await act(async () => {
+      commitRow.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(wipRow.getAttribute('data-selected')).toBe('false');
+    expect(commitRow.getAttribute('data-selected')).toBe('true');
+
+    // Esc clears the selection entirely (graph-level).
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(wipRow.getAttribute('data-selected')).toBe('false');
+    expect(commitRow.getAttribute('data-selected')).toBe('false');
   });
 });

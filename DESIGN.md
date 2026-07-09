@@ -320,9 +320,9 @@ persisted across sessions. Min/max keep either side from crowding out the graph.
   Hairline to divide search from list) and the Repository rail's global filter both use it.
 
 ### List rows (repository rail, branches, changes)
-- Dense single-line rows at Label size with a leading status dot or icon. Hover → Muted Surface;
-  selected → Accent Surface with the `primary` color on the active marker. **No card per row** —
-  rows are separated by tone and the occasional Hairline, never boxed.
+- Dense single-line rows with a leading status dot or icon. Hover → Muted Surface; selected → Accent
+  Surface with the `primary` color on the active marker. **No card per row** — rows are separated by
+  tone and the occasional Hairline, never boxed.
 
 ### Navigation
 - **Top bar:** a 44px (`h-11`) frameless drag region with the repository + branch selectors on the
@@ -340,7 +340,7 @@ persisted across sessions. Min/max keep either side from crowding out the graph.
 
 ### Ref pills
 - Branch / tag markers as small `rounded-sm` Micro-text pills on Accent Surface; the active branch
-  and special states (WIP, HEAD) take a stronger tint. Tiny, quiet, scannable. Fills are always
+  and Detached HEAD take a stronger tint. Tiny, quiet, scannable. Fills are always
   opaque (the strong tint is pre-mixed over the canvas, not a translucent primary): in the graph,
   hovering a row extends its pills over the lane lines, and a see-through pill would let the
   lines bleed into the text.
@@ -355,11 +355,18 @@ out-of-band (a failed *Open repository*, a sync error) — not routine confirmat
 
 ### The Inspector — Changes & Tree
 The right panel is one tabbed surface with two modes:
-- **Changes:** Staged and Unstaged groups, each a dense list of file rows at Label size. Every row
-  carries a leading status glyph (`M` modified, `A` added, `D` deleted, `R` renamed, `U` conflict)
-  in a small tinted square, the path, and `+N` / `−N` Micro stats. Group headers offer *Stage all* /
-  *Unstage all*; rows stage / unstage individually. Below the lists sit the commit-message field and
-  the primary **Commit N files** button. No card per row — tone and Hairlines separate them.
+- **Changes:** Staged and Unstaged groups, each a dense single-line list of file rows. Every row
+  leads with a small **duotone status icon** (Phosphor — pencil = modified, arrow = renamed, plus =
+  added, minus = deleted): quiet Muted Ink for modified / renamed, a success / destructive tint for
+  added / deleted so the whole-file cases scan by hue (color spent only on those exceptions, per the
+  Spent Color Rule). GitKraken-style, the Muted-Ink directory path sits on the left (truncating
+  head-first) and the filename at Body size (medium weight) on the right, so the filename is what you
+  scan (the name ellipsizes only if it alone overruns the row); the `+N` / `−N` Micro stats reveal on
+  hover / focus, absolutely placed so they never shift the filename — a side shows only when it moved
+  (binary / untracked show none), so the resting row stays quiet. Group headers offer
+  *Stage all* / *Unstage all*; rows stage / unstage individually. Below the lists sit the
+  commit-message field and the primary **Commit N files** button. No card per row — tone and
+  Hairlines separate them. (A future preference may swap the icons back to `M`/`A`/`D` letters.)
 - **Tree:** a collapsible file browser with a filter field, directory rows that disclose, and file
   rows at Label size with a leading file / status dot. Selected row → Accent Surface. Dense, never boxed.
 
@@ -381,7 +388,13 @@ who / which), kept small, and never louder than the graph or the primary action.
 ### Signature Component — The Commit Graph
 The protagonist. Colored **lanes** (lane-1…5) draw branches and merges as a transit map down the
 GRAPH · REFS column; commit **nodes** sit on lanes; the matching row carries a barely-there tint of
-the lane color. The current row (Uncommitted / WIP) is highlighted with a stronger tint.
+the lane color. The current row (Uncommitted / WIP) wears **no ref pill** — a hollow **dashed node**
+in the HEAD lane, a short dashed connector into the first Commit, and a **persistent stronger tint**
+(the run-member step, not the 6% rest) mark it as the live Working-tree state even at rest; hover and
+selection escalate it exactly like a Commit row. "WIP" as a label is dev jargon the subject
+("Uncommitted changes") already says plainly. Where a Commit row shows author + time, the WIP row
+shows its change **summary** — file counts by type (the Changes-panel icons) and the aggregate
+`+N −N` lines — with no timestamp (it is always "now").
 - **Legibility is non-negotiable.** Lanes must stay distinguishable by **position + lightness +
   ref label**, so the graph reads for color-blind users and survives a low-chroma source.
 - Because lane chroma follows the source, enforce a **minimum lane chroma and clear lightness
