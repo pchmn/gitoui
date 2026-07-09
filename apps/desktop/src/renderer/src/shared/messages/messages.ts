@@ -78,6 +78,13 @@ export const messages = {
     stagedHeading: 'STAGED',
     unstagedHeading: 'UNSTAGED',
     retry: 'Retry',
+    // Group-header bulk actions (DESIGN.md mockup): Unstage all sits on the STAGED group, Stage all
+    // on the UNSTAGED group.
+    stageAll: 'Stage all',
+    unstageAll: 'Unstage all',
+    // Per-row checkbox labels — the accessible name for the stage/unstage toggle.
+    stageRowAria: (name: string) => `Stage ${name}`,
+    unstageRowAria: (name: string) => `Unstage ${name}`,
   },
   commitGraph: {
     failedToLoad: 'Failed to load commits.',
@@ -110,10 +117,17 @@ export const messages = {
       branchExists: (name: string) => `A branch named "${name}" already exists.`,
       invalidBranchName: (name: string) => `"${name}" is not a valid branch name.`,
       uncommittedChanges: 'Working tree has uncommitted changes. Commit or stash them first.',
+      // Fallback when a git command fails but git gave no usable message (GitCommandError carries
+      // git's own stderr — that verbatim line is preferred over this generic phrase).
+      gitCommandFailed: 'Git could not complete the operation.',
       unexpected: 'An unexpected error occurred.',
     },
     switchBranch: { title: 'Could not switch branch' },
     createBranch: { title: 'Could not create branch' },
+    stageFile: { title: 'Could not stage file' },
+    unstageFile: { title: 'Could not unstage file' },
+    stageAll: { title: 'Could not stage changes' },
+    unstageAll: { title: 'Could not unstage changes' },
     activateRepository: {
       title: 'Could not open repository',
       // Override of byTag.repoNotFound — context-specific wording for this action.

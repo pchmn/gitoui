@@ -16,6 +16,7 @@ import type {
 } from '@gitoui/contracts/git';
 import {
   BranchExistsError,
+  GitCommandError,
   InvalidBranchNameError,
   NotARepositoryError,
   RepoNotFoundError,
@@ -116,6 +117,37 @@ export function parseOverwriteError(message: string): string[] | null {
     .split('\n')
     .filter((line) => line.startsWith('\t'))
     .map((line) => line.trim());
+}
+
+/**
+ * Extract a concise, human-facing message from a failed git command's cause (simple-git's
+ * `GitError.message` is git's raw stderr). Returns the first non-empty line, trimmed — enough to
+ * name the failure (`fatal: pathspec '…' did not match any files`) without dumping git's multi-line
+ * hint blocks into a Toast. Falls back to a generic phrase when there's nothing usable.
+ *
+ * Pure function — no IO — so it can be unit-tested against pinned output without spawning git.
+ */
+export function extractGitMessage(cause: unknown): string {
+  const raw = cause instanceof Error ? cause.message : String(cause);
+  const firstLine = raw
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => line.length > 0);
+  return firstLine ?? 'git command failed';
+}
+
+/**
+ * True when a `git restore --staged` failure is the unborn-HEAD case: a Repository with no commits,
+ * where `restore` can't resolve HEAD (git prints `fatal: could not resolve HEAD`). The caller then
+ * falls back to `git rm --cached`, which unstages the (necessarily-added) path without a HEAD.
+ * `rm --cached` would be WRONG on a normal HEAD — it stages a deletion instead of unstaging a
+ * modification — so this guard keeps the fallback to the unborn case only.
+ *
+ * Pure function — no IO — so it can be unit-tested against pinned output without spawning git.
+ */
+export function isUnbornHeadError(cause: unknown): boolean {
+  const message = cause instanceof Error ? cause.message : String(cause);
+  return message.includes('could not resolve HEAD');
 }
 
 /**
@@ -595,6 +627,78 @@ export class GitClient extends Effect.Service<GitClient>()('@gitoui/core/GitClie
             },
           ),
         ),
+
+    /**
+     * Stage one path (issue #62). `git add -- <path>` — since git 2.0 this also records deletions,
+     * so a deleted file needs no special-casing. A failure (a refused pathspec, an embedded-repo
+     * edge case, …) surfaces as `GitCommandError` carrying git's own message — NOT `RepoNotFoundError`
+     * (the Repository is open; the operation is what failed).
+     */
+    stageFile: (repoPath: string, path: string): Effect.Effect<void, GitCommandError> =>
+      withGit(repoPath, async (git) => {
+        await git.raw(['add', '--', path]);
+      }).pipe(
+        Effect.catchTag(
+          'GitProcessError',
+          (e) => new GitCommandError({ message: extractGitMessage(e.cause) }),
+        ),
+      ),
+
+    /**
+     * Unstage one path (issue #62). `git restore --staged -- <path>` on a normal HEAD; on an unborn
+     * HEAD that fails to resolve HEAD, so fall back to `git rm --cached -q -- <path>` (see
+     * `isUnbornHeadError` for why the fallback is gated to that case). The try/catch keeps both
+     * attempts inside one `withGit`, so the fiber's abort signal still reaches whichever git runs.
+     * Any other failure surfaces as `GitCommandError` carrying git's message.
+     */
+    unstageFile: (repoPath: string, path: string): Effect.Effect<void, GitCommandError> =>
+      withGit(repoPath, async (git) => {
+        try {
+          await git.raw(['restore', '--staged', '--', path]);
+        } catch (cause) {
+          if (!isUnbornHeadError(cause)) throw cause;
+          await git.raw(['rm', '--cached', '-q', '--', path]);
+        }
+      }).pipe(
+        Effect.catchTag(
+          'GitProcessError',
+          (e) => new GitCommandError({ message: extractGitMessage(e.cause) }),
+        ),
+      ),
+
+    /**
+     * Stage every change in the Working tree (issue #62). `git add -A` stages modifications,
+     * additions, and deletions across the whole tree. Failure → `GitCommandError` (git's message).
+     */
+    stageAll: (repoPath: string): Effect.Effect<void, GitCommandError> =>
+      withGit(repoPath, async (git) => {
+        await git.raw(['add', '-A']);
+      }).pipe(
+        Effect.catchTag(
+          'GitProcessError',
+          (e) => new GitCommandError({ message: extractGitMessage(e.cause) }),
+        ),
+      ),
+
+    /**
+     * Unstage everything (issue #62). `git restore --staged .` on a normal HEAD, with the same
+     * unborn-HEAD fallback as `unstageFile` (`git rm --cached -r -q -- .`). Failure →
+     * `GitCommandError` (git's message).
+     */
+    unstageAll: (repoPath: string): Effect.Effect<void, GitCommandError> =>
+      withGit(repoPath, async (git) => {
+        try {
+          await git.raw(['restore', '--staged', '.']);
+        } catch (cause) {
+          if (!isUnbornHeadError(cause)) throw cause;
+          await git.raw(['rm', '--cached', '-r', '-q', '--', '.']);
+        }
+      }).pipe(
+        Effect.catchTag(
+          'GitProcessError',
+          (e) => new GitCommandError({ message: extractGitMessage(e.cause) }),
+        ),
+      ),
 
     /**
      * List all configured remotes with their remote-tracking branches (issue #34).

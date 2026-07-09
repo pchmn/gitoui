@@ -49,6 +49,18 @@ export class NotARepositoryError extends Schema.TaggedError<NotARepositoryError>
   },
 ) {}
 
+/**
+ * A mutating git command failed for a reason that isn't a recognized business error — a path git
+ * refused (e.g. `pathspec did not match`), an embedded-repo / submodule edge case, an index lock,
+ * and so on. Carries the first line of git's own stderr (`message`) so the UI can tell the user WHY
+ * instead of a misleading catch-all. Distinct from `RepoNotFoundError`, which is reserved for the
+ * Repository itself being gone. Used by the staging methods, whose failures are almost never
+ * "repo not found" (the Repository is open) but a per-operation problem worth showing verbatim.
+ */
+export class GitCommandError extends Schema.TaggedError<GitCommandError>()('GitCommandError', {
+  message: Schema.String,
+}) {}
+
 // --- Domain schemas (minimal placeholders — real shapes come with the business logic) ---
 
 export const ChangeKind = Schema.Literal('added', 'modified', 'deleted', 'renamed', 'untracked');
@@ -105,6 +117,17 @@ export const CreateBranchInput = Schema.Struct({
   name: Schema.String,
 });
 export type CreateBranchInput = typeof CreateBranchInput.Type;
+
+/**
+ * Input for a single-file staging op — `stageFile` / `unstageFile` both take one `path` (relative
+ * to the Repository root) within a Repository. Whole-tree ops (`stageAll` / `unstageAll`) reuse
+ * `RepoInput` — they carry no path.
+ */
+export const StageFileInput = Schema.Struct({
+  repoPath: Schema.String,
+  path: Schema.String,
+});
+export type StageFileInput = typeof StageFileInput.Type;
 
 /** A raw, user-picked folder path, before git has validated/canonicalized it. */
 export const ResolveRepositoryInput = Schema.Struct({ path: Schema.String });
@@ -262,6 +285,47 @@ export const createBranch = defineMethod({
   payload: CreateBranchInput,
   success: Schema.Void,
   error: Schema.Union(RepoNotFoundError, BranchExistsError, InvalidBranchNameError),
+});
+
+/**
+ * Stage one path (`git add -- <path>`). Since git 2.0 `add` also records deletions, so a deleted
+ * file needs no special-casing. A path already staged, or a no-op stage, exits 0. Any failure
+ * surfaces as `GitCommandError` carrying git's message (staging failures — a refused pathspec, an
+ * embedded-repo edge case — are almost never "repo not found", so the real reason is shown).
+ */
+export const stageFile = defineMethod({
+  payload: StageFileInput,
+  success: Schema.Void,
+  error: GitCommandError,
+});
+
+/**
+ * Unstage one path (`git restore --staged -- <path>`). Seam: on an unborn HEAD (a Repository with
+ * no commits) `restore --staged` can't resolve HEAD and fails — core falls back to
+ * `git rm --cached -q -- <path>`, which unstages the (necessarily-added) path without a HEAD. Any
+ * other failure surfaces as `GitCommandError` carrying git's message.
+ */
+export const unstageFile = defineMethod({
+  payload: StageFileInput,
+  success: Schema.Void,
+  error: GitCommandError,
+});
+
+/** Stage every change in the Working tree (`git add -A`). Failure → `GitCommandError`. */
+export const stageAll = defineMethod({
+  payload: RepoInput,
+  success: Schema.Void,
+  error: GitCommandError,
+});
+
+/**
+ * Unstage everything (`git restore --staged .`), with the same unborn-HEAD fallback as
+ * `unstageFile` (`git rm --cached -r -q -- .`). Failure → `GitCommandError`.
+ */
+export const unstageAll = defineMethod({
+  payload: RepoInput,
+  success: Schema.Void,
+  error: GitCommandError,
 });
 
 /**

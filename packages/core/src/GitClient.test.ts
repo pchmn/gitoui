@@ -6,7 +6,9 @@ import { it } from '@effect/vitest';
 import { Effect } from 'effect';
 import { afterAll, beforeAll, describe, expect } from 'vitest';
 import {
+  extractGitMessage,
   GitClient,
+  isUnbornHeadError,
   parseCommitLog,
   parseForEachRef,
   parseNumstat,
@@ -1113,4 +1115,231 @@ describe('GitClient.status', () => {
       expect(error._tag).toBe('RepoNotFoundError');
     }).pipe(Effect.provide(GitClient.Default)),
   );
+});
+
+// --- isUnbornHeadError unit tests (pure) ---
+
+describe('isUnbornHeadError', () => {
+  it('matches the unborn-HEAD restore failure git prints', () => {
+    expect(isUnbornHeadError(new Error('fatal: could not resolve HEAD'))).toBe(true);
+  });
+
+  it('is false for an unrelated git failure', () => {
+    expect(isUnbornHeadError(new Error('fatal: not a git repository'))).toBe(false);
+  });
+
+  it('normalizes a non-Error cause', () => {
+    expect(isUnbornHeadError('could not resolve HEAD')).toBe(true);
+    expect(isUnbornHeadError(null)).toBe(false);
+  });
+});
+
+// --- GitClient staging integration tests (stageFile / unstageFile / stageAll / unstageAll) ---
+
+describe('GitClient staging', () => {
+  let base: string;
+
+  const g = (cwd: string, ...args: string[]) =>
+    execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+
+  // A fresh repo per test — staging mutates index state, so tests must never share one.
+  const makeRepo = (withInitialCommit: boolean): string => {
+    const repo = mkdtempSync(join(base, 'repo-'));
+    execFileSync('git', ['init', '-q', '-b', 'main', repo]);
+    g(repo, 'config', 'user.email', 'test@test.com');
+    g(repo, 'config', 'user.name', 'Test');
+    if (withInitialCommit) {
+      writeFileSync(join(repo, 'committed.txt'), 'v1');
+      g(repo, 'add', 'committed.txt');
+      g(repo, 'commit', '-m', 'init');
+    }
+    return repo;
+  };
+
+  // The `<XY>` porcelain-v2 axes for one path ('M.' staged mod, '.M' unstaged mod, 'A.' staged add,
+  // 'D.' staged delete, '.D' unstaged delete), '??' for untracked, or null when the path is clean.
+  const axesOf = (repo: string, path: string): string | null => {
+    const out = execFileSync('git', ['status', '--porcelain=v2', '-z'], {
+      cwd: repo,
+      encoding: 'utf8',
+    });
+    for (const token of out.split('\0')) {
+      if (!token) continue;
+      const type = token[0];
+      if (type === '1' || type === '2') {
+        const fields = token.split(' ');
+        const p = fields.slice(type === '1' ? 8 : 9).join(' ');
+        if (p === path) return fields[1] ?? '';
+      } else if (type === '?' && token.slice(2) === path) {
+        return '??';
+      }
+    }
+    return null;
+  };
+
+  beforeAll(() => {
+    base = realpathSync(mkdtempSync(join(tmpdir(), 'gitoui-staging-')));
+  });
+
+  afterAll(() => rmSync(base, { recursive: true, force: true }));
+
+  it.effect('stages a modified tracked file', () =>
+    Effect.gen(function* () {
+      const repo = makeRepo(true);
+      writeFileSync(join(repo, 'committed.txt'), 'v2');
+      expect(axesOf(repo, 'committed.txt')).toBe('.M');
+      const client = yield* GitClient;
+      yield* client.stageFile(repo, 'committed.txt');
+      expect(axesOf(repo, 'committed.txt')).toBe('M.');
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('stages a deleted file (git add records deletions since 2.0)', () =>
+    Effect.gen(function* () {
+      const repo = makeRepo(true);
+      rmSync(join(repo, 'committed.txt'));
+      expect(axesOf(repo, 'committed.txt')).toBe('.D');
+      const client = yield* GitClient;
+      yield* client.stageFile(repo, 'committed.txt');
+      expect(axesOf(repo, 'committed.txt')).toBe('D.');
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('stages an untracked file', () =>
+    Effect.gen(function* () {
+      const repo = makeRepo(true);
+      writeFileSync(join(repo, 'new.txt'), 'hi');
+      expect(axesOf(repo, 'new.txt')).toBe('??');
+      const client = yield* GitClient;
+      yield* client.stageFile(repo, 'new.txt');
+      expect(axesOf(repo, 'new.txt')).toBe('A.');
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('unstages a staged modification on a normal HEAD', () =>
+    Effect.gen(function* () {
+      const repo = makeRepo(true);
+      writeFileSync(join(repo, 'committed.txt'), 'v2');
+      g(repo, 'add', 'committed.txt');
+      expect(axesOf(repo, 'committed.txt')).toBe('M.');
+      const client = yield* GitClient;
+      yield* client.unstageFile(repo, 'committed.txt');
+      // Index entry reset to HEAD — the modification moves back to the unstaged axis.
+      expect(axesOf(repo, 'committed.txt')).toBe('.M');
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('unstages on an unborn HEAD via the rm --cached fallback', () =>
+    Effect.gen(function* () {
+      const repo = makeRepo(false); // no commits — unborn HEAD
+      writeFileSync(join(repo, 'new.txt'), 'hi');
+      g(repo, 'add', 'new.txt');
+      expect(axesOf(repo, 'new.txt')).toBe('A.');
+      const client = yield* GitClient;
+      yield* client.unstageFile(repo, 'new.txt');
+      // The addition is dropped from the index — back to untracked.
+      expect(axesOf(repo, 'new.txt')).toBe('??');
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('stages every change with stageAll', () =>
+    Effect.gen(function* () {
+      const repo = makeRepo(true);
+      writeFileSync(join(repo, 'committed.txt'), 'v2'); // modified
+      writeFileSync(join(repo, 'new.txt'), 'hi'); // untracked
+      const client = yield* GitClient;
+      yield* client.stageAll(repo);
+      expect(axesOf(repo, 'committed.txt')).toBe('M.');
+      expect(axesOf(repo, 'new.txt')).toBe('A.');
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('unstages every change with unstageAll, round-tripping a staged deletion', () =>
+    Effect.gen(function* () {
+      const repo = makeRepo(true);
+      // A second committed file we can then stage a deletion of.
+      writeFileSync(join(repo, 'todelete.txt'), 'x');
+      g(repo, 'add', 'todelete.txt');
+      g(repo, 'commit', '-m', 'add todelete');
+      // Stage a modification, an addition, and a deletion.
+      writeFileSync(join(repo, 'committed.txt'), 'v2');
+      writeFileSync(join(repo, 'new.txt'), 'hi');
+      rmSync(join(repo, 'todelete.txt'));
+      g(repo, 'add', '-A');
+      expect(axesOf(repo, 'committed.txt')).toBe('M.');
+      expect(axesOf(repo, 'new.txt')).toBe('A.');
+      expect(axesOf(repo, 'todelete.txt')).toBe('D.');
+
+      const client = yield* GitClient;
+      yield* client.unstageAll(repo);
+      // Everything leaves the staged axis; the deletion round-trips to an unstaged deletion.
+      expect(axesOf(repo, 'committed.txt')).toBe('.M');
+      expect(axesOf(repo, 'new.txt')).toBe('??');
+      expect(axesOf(repo, 'todelete.txt')).toBe('.D');
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('unstageAll falls back on an unborn HEAD', () =>
+    Effect.gen(function* () {
+      const repo = makeRepo(false);
+      writeFileSync(join(repo, 'a.txt'), 'a');
+      writeFileSync(join(repo, 'b.txt'), 'b');
+      g(repo, 'add', '-A');
+      expect(axesOf(repo, 'a.txt')).toBe('A.');
+      const client = yield* GitClient;
+      yield* client.unstageAll(repo);
+      expect(axesOf(repo, 'a.txt')).toBe('??');
+      expect(axesOf(repo, 'b.txt')).toBe('??');
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect("surfaces git's message as GitCommandError when a pathspec does not match", () =>
+    Effect.gen(function* () {
+      const repo = makeRepo(true);
+      const client = yield* GitClient;
+      // Staging a path that isn't in the Working tree fails — the failure is a per-operation
+      // problem, NOT "repo not found", so it must carry git's own message.
+      const error = yield* Effect.flip(client.stageFile(repo, 'does-not-exist.txt'));
+      expect(error._tag).toBe('GitCommandError');
+      if (error._tag === 'GitCommandError') {
+        expect(error.message).toContain('pathspec');
+        expect(error.message).not.toContain('\n'); // first line only, no hint blocks
+      }
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('fails with GitCommandError for a bad repo path', () =>
+    Effect.gen(function* () {
+      const client = yield* GitClient;
+      const error = yield* Effect.flip(client.stageFile(join(base, 'does-not-exist'), 'x'));
+      expect(error._tag).toBe('GitCommandError');
+      if (error._tag === 'GitCommandError') {
+        expect(error.message.length).toBeGreaterThan(0);
+      }
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+});
+
+// --- extractGitMessage unit tests (pure) ---
+
+describe('extractGitMessage', () => {
+  it('returns the first non-empty line, trimmed', () => {
+    expect(extractGitMessage(new Error("fatal: pathspec 'x' did not match any files\n"))).toBe(
+      "fatal: pathspec 'x' did not match any files",
+    );
+  });
+
+  it('drops git hint blocks after the first line', () => {
+    const raw = 'fatal: something went wrong\nhint: try this\nhint: or that\n';
+    expect(extractGitMessage(new Error(raw))).toBe('fatal: something went wrong');
+  });
+
+  it('skips leading blank lines', () => {
+    expect(extractGitMessage('\n\n  error: boom  \n')).toBe('error: boom');
+  });
+
+  it('falls back when there is nothing usable', () => {
+    expect(extractGitMessage('')).toBe('git command failed');
+    expect(extractGitMessage(null)).toBe('null');
+  });
 });

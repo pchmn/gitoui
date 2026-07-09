@@ -192,6 +192,14 @@ saturation reserved for actions, state, and the graph.
   gutter sign — never saturated blocks — and as the `+N` / `−N` badges on file rows. Syntax
   highlighting stays restrained (Ink + Muted Ink carry most of it, a small accent set for
   keywords/strings); it must not turn the code panel into a rainbow that competes with the graph.
+- **Git-status letters** (`--git-added` / `--git-modified` / `--git-renamed` / `--git-deleted`): a
+  fixed, source-independent, **soft/pastel** four-color set for the Changes panel's `A`/`M`/`R`/`D`/`U`
+  status letters and its `+N`/`−N` stats, matching **Pierre's** palette — green (add / untracked),
+  blue (modified), gold (renamed), red (delete). Deliberately kept **separate** from Success / Alert
+  (which stay saturated for danger confirmations and diff line tints app-wide): these are lower-chroma
+  so a dense list of letters reads calm, not neon. Light values stay dark enough to hold on Canvas;
+  dark values are genuinely pastel on the dark canvas. Scoped to the status vocabulary — not general
+  accents (the primary action is still the source tint).
 
 ### Identity
 - **Avatars** (author + repository): a small set of deterministic identity colors, hashed from the
@@ -355,18 +363,27 @@ out-of-band (a failed *Open repository*, a sync error) — not routine confirmat
 
 ### The Inspector — Changes & Tree
 The right panel is one tabbed surface with two modes:
-- **Changes:** Staged and Unstaged groups, each a dense single-line list of file rows. Every row
-  leads with a small **duotone status icon** (Phosphor — pencil = modified, arrow = renamed, plus =
-  added, minus = deleted): quiet Muted Ink for modified / renamed, a success / destructive tint for
-  added / deleted so the whole-file cases scan by hue (color spent only on those exceptions, per the
-  Spent Color Rule). GitKraken-style, the Muted-Ink directory path sits on the left (truncating
-  head-first) and the filename at Body size (medium weight) on the right, so the filename is what you
-  scan (the name ellipsizes only if it alone overruns the row); the `+N` / `−N` Micro stats reveal on
-  hover / focus, absolutely placed so they never shift the filename — a side shows only when it moved
-  (binary / untracked show none), so the resting row stays quiet. Group headers offer
-  *Stage all* / *Unstage all*; rows stage / unstage individually. Below the lists sit the
-  commit-message field and the primary **Commit N files** button. No card per row — tone and
-  Hairlines separate them. (A future preference may swap the icons back to `M`/`A`/`D` letters.)
+- **Changes:** **Unstaged then Staged** groups (Unstaged on top — you act on it more), each a dense
+  single-line list of file rows (issue #62). GitKraken-style, the Muted-Ink directory path sits on
+  the left (truncating head-first) and the filename at Body size (medium weight) on the right, so the
+  filename is what you scan (the name ellipsizes only if it alone overruns the row). At the **far
+  right, a single status letter** (`A`/`M`/`D`/`R`/`U`) is always shown, tinted by kind in **Pierre's
+  soft git-status palette**: **blue** for modified, **green** for add / untracked, **gold** for
+  renamed, **red** for delete — the pastel `--git-*` tokens, a fixed-width column so the letters line
+  up (`CHANGE_LETTER_TONE`; the `+N`/`−N` stats use the same green/red). This per-kind hue is a
+  deliberate,
+  scoped exception to the graph's quieter policy: the Changes panel is a dense staging surface where
+  color-by-status speeds scanning; the graph's WIP-row summary keeps the quieter `CHANGE_TONE`
+  (modified stays Muted Ink there). The resting row is quiet: on **hover / focus** a
+  right cluster fades in just left of the letter, carrying the `+N` / `−N` Micro stats (a side shown
+  only when it moved; binary / untracked show none) and a single **stage / unstage action** — a `+`
+  icon button when Unstaged, `−` when Staged — absolutely placed with a gradient fade so they never
+  shift the filename. (There is no persistent checkbox; the hover `+` / `−` is the per-row
+  affordance.) A **leading file-type icon** is intentionally omitted for now — it returns with
+  `@pierre/trees` (which also backs the Tree tab). Group headers offer *Stage all* / *Unstage all*;
+  staging is optimistic — the row moves groups instantly and the real `git status` reconciles a
+  moment later. Below the lists sit the commit-message field and the primary **Commit N files**
+  button. No card per row — tone and Hairlines separate them.
 - **Tree:** a collapsible file browser with a filter field, directory rows that disclose, and file
   rows at Label size with a leading file / status dot. Selected row → Accent Surface. Dense, never boxed.
 

@@ -55,6 +55,34 @@ export function registerIpc(): void {
     ),
   );
 
+  makeIpcMethod(CHANNELS.git.stageFile, gitContract.stageFile, (payload) =>
+    GitClient.pipe(
+      Effect.flatMap((git) => git.stageFile(payload.repoPath, payload.path)),
+      Effect.provide(GitClient.Default),
+    ),
+  );
+
+  makeIpcMethod(CHANNELS.git.unstageFile, gitContract.unstageFile, (payload) =>
+    GitClient.pipe(
+      Effect.flatMap((git) => git.unstageFile(payload.repoPath, payload.path)),
+      Effect.provide(GitClient.Default),
+    ),
+  );
+
+  makeIpcMethod(CHANNELS.git.stageAll, gitContract.stageAll, (payload) =>
+    GitClient.pipe(
+      Effect.flatMap((git) => git.stageAll(payload.repoPath)),
+      Effect.provide(GitClient.Default),
+    ),
+  );
+
+  makeIpcMethod(CHANNELS.git.unstageAll, gitContract.unstageAll, (payload) =>
+    GitClient.pipe(
+      Effect.flatMap((git) => git.unstageAll(payload.repoPath)),
+      Effect.provide(GitClient.Default),
+    ),
+  );
+
   makeIpcMethod(CHANNELS.git.listRemotes, gitContract.listRemotes, (payload) =>
     GitClient.pipe(
       Effect.flatMap((git) => git.listRemotes(payload.repoPath)),

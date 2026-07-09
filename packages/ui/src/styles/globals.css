@@ -38,6 +38,10 @@
   /* Semantic addition/success color (DESIGN.md §Colors → Semantic): fixed, source-independent,
      paired with `--destructive` for diff/Changes-row stats (`+N` green, `-N` red). */
   --color-success: var(--success);
+  --color-git-added: var(--git-added);
+  --color-git-modified: var(--git-modified);
+  --color-git-renamed: var(--git-renamed);
+  --color-git-deleted: var(--git-deleted);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -90,6 +94,14 @@
   /* Success / addition (DESIGN.md §Colors → Semantic): reuses the conflict-red's lightness with a
      matching green hue, fixed and source-independent like `--destructive`. */
   --success: oklch(0.577 0.19 142.5);
+  /* Git-status letter colors (Pierre palette): fixed, source-independent, soft/pastel — added=green,
+     modified=blue, renamed=gold, deleted=red. Kept separate from `--success`/`--destructive` (which
+     stay saturated for danger + diff line tints app-wide); these are scoped to the Changes panel's
+     status letters and `+N`/`−N` stats. Light stays dark enough to read on Canvas; dark is pastel. */
+  --git-added: oklch(0.62 0.1 158);
+  --git-modified: oklch(0.6 0.11 248);
+  --git-renamed: oklch(0.64 0.09 80);
+  --git-deleted: oklch(0.6 0.13 25);
   --border: oklch(from var(--primary-source) 0.9 calc(c * 0.25) h);
   --input: oklch(from var(--primary-source) 0.92 calc(c * 0.2) h);
   --ring: oklch(from var(--primary-source) min(l, 0.55) c h);
@@ -135,6 +147,10 @@
   --accent-foreground: oklch(from var(--primary-source) 0.94 calc(c * 0.15) h);
   --destructive: oklch(0.704 0.191 22.216);
   --success: oklch(0.704 0.17 142.5);
+  --git-added: oklch(0.8 0.1 160);
+  --git-modified: oklch(0.78 0.1 248);
+  --git-renamed: oklch(0.84 0.08 82);
+  --git-deleted: oklch(0.76 0.12 25);
   --border: oklch(from var(--primary-source) 1 calc(c * 0.1) h / 10%);
   --input: oklch(from var(--primary-source) 1 calc(c * 0.1) h / 15%);
   --ring: oklch(from var(--primary-source) max(l, 0.72) c h);
