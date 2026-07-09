@@ -5,20 +5,20 @@ gitoui is a desktop git client (GitKraken-style). This glossary fixes the **cano
 ## Language
 
 **Repository**:
-A local working copy of a git project — a directory containing a `.git`. The top-level thing the user opens and operates on.
-_Avoid_: project, workspace (overloaded with monorepo/editor workspaces). "repo" is fine casually.
+The git project itself — identified by its common `.git` — owning one or more working trees: the **main working tree** (created with the clone) plus any linked **Worktrees**. Branches, Tags, Stashes, Remotes, and history belong to the Repository and are shared across all its working trees. What the user opens and operates in is one working tree *of* a Repository.
+_Avoid_: project, workspace (overloaded with monorepo/editor workspaces); equating the Repository with one checked-out folder (that's a working tree). "repo" is fine casually.
 
 **Remote**:
 A named connection to a remote repository (e.g. `origin`).
 _Avoid_: server. ("origin" is *one* remote, not the concept.)
 
 **Working tree**:
-The checked-out files the user edits — everything in the Repository except `.git`.
-_Avoid_: working directory, workdir, and especially **worktree** (a different feature, below).
+One checked-out tree of a Repository — the files the user edits, with its own HEAD and its own Status. A Repository always has a **main working tree** and may have linked **Worktrees**. Unqualified, "the Working tree" means the one currently active.
+_Avoid_: working directory, workdir.
 
 **Worktree** (linked worktree):
-An *additional* working tree attached to the same Repository via `git worktree add`, each with its own checked-out branch. Distinct from the **Working tree**.
-_Avoid_: conflating with "working tree".
+An *additional* working tree attached to the same Repository via `git worktree add`, with its own checked-out branch. A Branch can be checked out in at most one working tree at a time.
+_Avoid_: using "worktree" for the main working tree or for the general concept (that's **Working tree**).
 
 **Status**:
 The computed snapshot of a Repository's current state: Staged / Unstaged / Untracked / Conflicted entries, plus the current Branch, its ahead/behind counts, and the Operation in progress (if any). The entity the watcher pushes live.
