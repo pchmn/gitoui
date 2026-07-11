@@ -9,9 +9,11 @@ import { useReducer } from 'react';
 
 /**
  * Query key factory for one Repository's `status` row. `['status']` is the collection's base
- * prefix (`queryKey({})`), and every subset key is `['status', repoPath]` — the SAME prefix the
- * StatusBar's plain `useQuery(['status', root], …)` already uses (issue #61), so a shared
- * `invalidateQueries(statusKey(root))` reaches both once StatusBar migrates.
+ * prefix (`queryKey({})`), and every subset key is `['status', repoPath]`. Every consumer — the
+ * Changes panel AND the StatusBar — reads this ONE collection (never a competing plain
+ * `useQuery(['status', …])`): a second query on the same key with a different result shape (object
+ * vs the collection's array) would collide and make `invalidateQueries(statusKey(root))` throw. So a
+ * single `invalidateQueries(statusKey(root))` refreshes the whole app's status after any mutation.
  */
 export const statusKey = (repoPath: string) => ['status', repoPath] as const;
 
@@ -37,7 +39,7 @@ type StatusCollection = Collection<StatusRow, string | number, QueryCollectionUt
  */
 const collections = new WeakMap<QueryClient, StatusCollection>();
 
-function statusCollection(queryClient: QueryClient): StatusCollection {
+export function statusCollection(queryClient: QueryClient): StatusCollection {
   const existing = collections.get(queryClient);
   if (existing) return existing;
 

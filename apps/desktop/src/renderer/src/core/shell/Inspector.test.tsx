@@ -69,8 +69,11 @@ function Wrapper({ root }: { root: string | null }) {
 describe('Inspector visibility', () => {
   it('renders the Changes tab and Clean working tree when a Repository is open', async () => {
     render(<Wrapper root='/repo/my-project' />);
-    expect(await screen.findByText('Changes')).toBeTruthy();
-    expect(await screen.findByText('Clean working tree')).toBeTruthy();
+    const changesTab = await screen.findByText('Changes');
+    // The StatusBar and the Changes panel both surface "Clean working tree" (both read the shared
+    // `status` collection now), so scope this to the Inspector's own panel.
+    const inspector = changesTab.closest('aside') as HTMLElement;
+    expect(await within(inspector).findByText('Clean working tree')).toBeTruthy();
   });
 
   it('does not render on EmptyState (no repo open)', () => {
@@ -84,6 +87,48 @@ describe('Inspector visibility', () => {
     // Base UI's Tab keeps a disabled tab focusable-but-inert (`focusableWhenDisabled`), so it
     // marks `aria-disabled`/`data-disabled` rather than the native `disabled` attribute.
     expect(treeTab.getAttribute('aria-disabled')).toBe('true');
+  });
+
+  // Regression: staging from the Changes panel invalidates `['status', root]`, and the StatusBar
+  // reads that SAME collection. If a consumer ever re-introduces a competing plain
+  // `useQuery(['status', …])` (different result shape), the collection's refetch throws
+  // "queryFn must return an array of objects" and the panel never refreshes. This drives the whole
+  // shell (StatusBar + Changes panel) to catch that.
+  it('stages a file from the Changes panel and refreshes without a status query collision', async () => {
+    let staged = false;
+    vi.stubGlobal('git', {
+      status: vi.fn(() =>
+        Promise.resolve({
+          branch: 'main',
+          ahead: 0,
+          behind: 0,
+          entries: staged
+            ? [{ path: 'a.txt', staged: { kind: 'modified' } }]
+            : [{ path: 'a.txt', unstaged: { kind: 'modified' } }],
+        }),
+      ),
+      stageFile: vi.fn(() => {
+        staged = true;
+        return Promise.resolve();
+      }),
+      unstageFile: vi.fn(() => Promise.resolve()),
+      stageAll: vi.fn(() => Promise.resolve()),
+      unstageAll: vi.fn(() => Promise.resolve()),
+      listBranches: vi
+        .fn()
+        .mockResolvedValue({ branches: [], head: { _tag: 'OnBranch', branch: 'main' } }),
+      listCommits: vi.fn().mockResolvedValue([]),
+    });
+
+    render(<Wrapper root='/repo/my-project' />);
+
+    const checkbox = await screen.findByRole('button', { name: 'Stage a.txt' });
+    fireEvent.click(checkbox);
+
+    // The invalidation-driven refetch must succeed: the row moves to Staged, so its toggle now reads
+    // "Unstage a.txt". Under the old query-key collision the collection would throw on refetch and
+    // this checkbox would never appear (the panel would show its error state instead).
+    expect(await screen.findByRole('button', { name: 'Unstage a.txt' })).toBeTruthy();
   });
 });
 

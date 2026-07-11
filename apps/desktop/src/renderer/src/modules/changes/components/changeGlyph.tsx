@@ -35,3 +35,32 @@ export const CHANGE_TONE: Record<ChangeKind, string> = {
   untracked: 'text-success',
   deleted: 'text-destructive',
 };
+
+/**
+ * Single-letter status marker per kind (`A`/`M`/`D`/`R`/`U`), git-familiar and VSCode-familiar.
+ * Used by the Changes rows' trailing status column. Untracked is `U`, not `A`: a not-yet-tracked
+ * file, distinct from a staged addition.
+ */
+export const CHANGE_LETTER: Record<ChangeKind, string> = {
+  modified: 'M',
+  renamed: 'R',
+  added: 'A',
+  untracked: 'U',
+  deleted: 'D',
+};
+
+/**
+ * Tint for the Changes-panel status letters, matching **Pierre's** soft git-status palette: **blue**
+ * for modified, **green** for add / untracked, **gold** for renamed, **red** for delete — the pastel
+ * `--git-*` tokens (kept separate from the saturated app-wide `--success`/`--destructive`, which stay
+ * loud for danger and diff tints). Distinct from `CHANGE_TONE` (which keeps modified quiet in the
+ * graph's WIP-row summary): the Changes panel is a dense staging surface where a per-kind hue helps
+ * scanning — a deliberate, scoped exception to the graph's quieter policy.
+ */
+export const CHANGE_LETTER_TONE: Record<ChangeKind, string> = {
+  modified: 'text-git-modified',
+  renamed: 'text-git-renamed',
+  added: 'text-git-added',
+  untracked: 'text-git-added',
+  deleted: 'text-git-deleted',
+};

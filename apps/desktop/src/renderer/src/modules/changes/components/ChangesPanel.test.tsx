@@ -4,7 +4,7 @@
 
 import type { Status, StatusEntry } from '@gitoui/contracts/git';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { useEffect } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -12,6 +12,10 @@ import {
   useActiveRepository,
 } from '#renderer/modules/repository/ActiveRepositoryContext';
 import { ChangesPanel } from './ChangesPanel';
+
+// Spy on the Toast surface so staging-error tests can assert what the user is shown.
+const { mockToastAdd } = vi.hoisted(() => ({ mockToastAdd: vi.fn() }));
+vi.mock('@gitoui/ui/toast', () => ({ toast: { add: mockToastAdd } }));
 
 afterEach(() => {
   cleanup();
@@ -32,14 +36,24 @@ function RootSetter({ root }: { root: string }) {
   return null;
 }
 
+type StagingMock = ReturnType<typeof vi.fn>;
+
 function Wrapper({
   root = '/repo',
   statusMock,
+  git: gitExtra,
 }: {
   root?: string;
   statusMock: () => Promise<Status>;
+  git?: Partial<Record<'stageFile' | 'unstageFile' | 'stageAll' | 'unstageAll', StagingMock>>;
 }) {
-  vi.stubGlobal('git', { status: vi.fn(statusMock) });
+  vi.stubGlobal('git', {
+    status: vi.fn(statusMock),
+    stageFile: gitExtra?.stageFile ?? vi.fn(() => Promise.resolve()),
+    unstageFile: gitExtra?.unstageFile ?? vi.fn(() => Promise.resolve()),
+    stageAll: gitExtra?.stageAll ?? vi.fn(() => Promise.resolve()),
+    unstageAll: gitExtra?.unstageAll ?? vi.fn(() => Promise.resolve()),
+  });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
     <QueryClientProvider client={queryClient}>
@@ -192,19 +206,19 @@ describe('ChangesPanel groups', () => {
     expect(screen.queryByText('−0')).toBeNull();
     expect(screen.queryByText('+0')).toBeNull();
 
-    // The glyph square carries its kind and the semantic tint (color spent on the add/delete case).
+    // The status letter carries its kind and the Pierre-palette tint (green add, red delete).
     const addedGlyph = screen
       .getByText('added.ts')
       .closest('[role="option"]')
       ?.querySelector('[data-kind]');
     expect(addedGlyph?.getAttribute('data-kind')).toBe('added');
-    expect(addedGlyph?.className).toContain('text-success');
+    expect(addedGlyph?.className).toContain('text-git-added');
     const removedGlyph = screen
       .getByText('removed.ts')
       .closest('[role="option"]')
       ?.querySelector('[data-kind]');
     expect(removedGlyph?.getAttribute('data-kind')).toBe('deleted');
-    expect(removedGlyph?.className).toContain('text-destructive');
+    expect(removedGlyph?.className).toContain('text-git-deleted');
   });
 
   it('omits stats for untracked and binary entries', async () => {
@@ -217,5 +231,152 @@ describe('ChangesPanel groups', () => {
     await screen.findByText('new-file.ts');
     expect(screen.queryByText(/^\+/)).toBeNull();
     expect(screen.queryByText(/^−/)).toBeNull();
+  });
+});
+
+describe('ChangesPanel staging', () => {
+  it('stages an unstaged file when its checkbox is ticked, then refreshes', async () => {
+    let staged = false;
+    const statusMock = vi.fn(() =>
+      Promise.resolve(
+        makeStatus({
+          entries: staged
+            ? [{ path: 'a.txt', staged: { kind: 'modified' } }]
+            : [{ path: 'a.txt', unstaged: { kind: 'modified' } }],
+        }),
+      ),
+    );
+    // Staging flips the fixture so the invalidated `status` refetch shows the moved row.
+    const stageFile = vi.fn(() => {
+      staged = true;
+      return Promise.resolve();
+    });
+
+    render(<Wrapper statusMock={statusMock} git={{ stageFile }} />);
+
+    const checkbox = await screen.findByRole('button', { name: 'Stage a.txt' });
+    await act(async () => {
+      checkbox.click();
+    });
+
+    expect(stageFile).toHaveBeenCalledWith({ repoPath: '/repo', path: 'a.txt' });
+    // The list refreshes: a.txt now sits in the Staged group, so its toggle reads "Unstage a.txt".
+    await screen.findByRole('button', { name: 'Unstage a.txt' });
+  });
+
+  it('unstages a staged file when its checkbox is unticked', async () => {
+    const unstageFile = vi.fn(() => Promise.resolve());
+    render(
+      <Wrapper
+        statusMock={() =>
+          Promise.resolve(
+            makeStatus({ entries: [{ path: 'a.txt', staged: { kind: 'modified' } }] }),
+          )
+        }
+        git={{ unstageFile }}
+      />,
+    );
+
+    const checkbox = await screen.findByRole('button', { name: 'Unstage a.txt' });
+    await act(async () => {
+      checkbox.click();
+    });
+
+    expect(unstageFile).toHaveBeenCalledWith({ repoPath: '/repo', path: 'a.txt' });
+  });
+
+  it('stages everything when Stage all is clicked', async () => {
+    const stageAll = vi.fn(() => Promise.resolve());
+    render(
+      <Wrapper
+        statusMock={() =>
+          Promise.resolve(
+            makeStatus({ entries: [{ path: 'a.txt', unstaged: { kind: 'modified' } }] }),
+          )
+        }
+        git={{ stageAll }}
+      />,
+    );
+
+    // Exact name so "Stage all" doesn't also match the "Unstage all" header action.
+    const button = await screen.findByRole('button', { name: 'Stage all' });
+    await act(async () => {
+      button.click();
+    });
+
+    expect(stageAll).toHaveBeenCalledWith({ repoPath: '/repo' });
+  });
+
+  it('unstages everything when Unstage all is clicked', async () => {
+    const unstageAll = vi.fn(() => Promise.resolve());
+    render(
+      <Wrapper
+        statusMock={() =>
+          Promise.resolve(
+            makeStatus({ entries: [{ path: 'a.txt', staged: { kind: 'modified' } }] }),
+          )
+        }
+        git={{ unstageAll }}
+      />,
+    );
+
+    const button = await screen.findByRole('button', { name: 'Unstage all' });
+    await act(async () => {
+      button.click();
+    });
+
+    expect(unstageAll).toHaveBeenCalledWith({ repoPath: '/repo' });
+  });
+
+  it('optimistically moves the row to Staged before the git call resolves', async () => {
+    // `stageFile` never resolves, so `onSettled`/reconcile can't fire — if the row moves to Staged,
+    // it can ONLY be the optimistic `onMutate` write, not a status refetch.
+    const stageFile = vi.fn(() => new Promise<void>(() => {}));
+    render(
+      <Wrapper
+        statusMock={() =>
+          Promise.resolve(
+            makeStatus({ entries: [{ path: 'a.txt', unstaged: { kind: 'modified' } }] }),
+          )
+        }
+        git={{ stageFile }}
+      />,
+    );
+
+    const checkbox = await screen.findByRole('button', { name: 'Stage a.txt' });
+    await act(async () => {
+      checkbox.click();
+    });
+
+    // Instant optimistic move: the row is now in the Staged group (toggle reads "Unstage a.txt").
+    expect(await screen.findByRole('button', { name: 'Unstage a.txt' })).toBeTruthy();
+    expect(stageFile).toHaveBeenCalledWith({ repoPath: '/repo', path: 'a.txt' });
+  });
+
+  it("toasts git's own message (not a misleading catch-all) when staging fails", async () => {
+    mockToastAdd.mockClear();
+    const gitMessage = "fatal: pathspec '.claude/worktrees/agent-x' did not match any files";
+    const stageFile = vi.fn(() => Promise.reject({ _tag: 'GitCommandError', message: gitMessage }));
+    render(
+      <Wrapper
+        statusMock={() =>
+          Promise.resolve(
+            makeStatus({ entries: [{ path: 'a.txt', unstaged: { kind: 'modified' } }] }),
+          )
+        }
+        git={{ stageFile }}
+      />,
+    );
+
+    const checkbox = await screen.findByRole('button', { name: 'Stage a.txt' });
+    await act(async () => {
+      checkbox.click();
+    });
+
+    await waitFor(() =>
+      expect(mockToastAdd).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'error', description: gitMessage }),
+      ),
+    );
   });
 });

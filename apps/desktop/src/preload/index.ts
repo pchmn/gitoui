@@ -12,6 +12,7 @@ import type {
   RepoInput,
   ResolvedRepository,
   ResolveRepositoryInput,
+  StageFileInput,
   StashList,
   Status,
   SwitchBranchInput,
@@ -56,6 +57,14 @@ const git = {
     invoke(CHANNELS.git.switchBranch, input) as Promise<void>,
   createBranch: (input: CreateBranchInput): Promise<void> =>
     invoke(CHANNELS.git.createBranch, input) as Promise<void>,
+  stageFile: (input: StageFileInput): Promise<void> =>
+    invoke(CHANNELS.git.stageFile, input) as Promise<void>,
+  unstageFile: (input: StageFileInput): Promise<void> =>
+    invoke(CHANNELS.git.unstageFile, input) as Promise<void>,
+  stageAll: (input: RepoInput): Promise<void> =>
+    invoke(CHANNELS.git.stageAll, input) as Promise<void>,
+  unstageAll: (input: RepoInput): Promise<void> =>
+    invoke(CHANNELS.git.unstageAll, input) as Promise<void>,
   listRemotes: (input: RepoInput): Promise<RemoteList> =>
     invoke(CHANNELS.git.listRemotes, input) as Promise<RemoteList>,
   listTags: (input: RepoInput): Promise<TagList> =>

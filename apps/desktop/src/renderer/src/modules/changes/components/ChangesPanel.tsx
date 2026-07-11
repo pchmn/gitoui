@@ -3,22 +3,26 @@ import type { GitError } from '#renderer/shared/git/errors';
 import { messages } from '#renderer/shared/messages/messages';
 import { matchError } from '#renderer/shared/utils/matchError';
 import { useActiveRepository } from '../../repository/ActiveRepositoryContext';
+import { useStaging } from '../hooks/useStaging';
 import { useStatus } from '../hooks/useStatus';
 import { ChangeRow } from './ChangeRow';
 
 /**
- * The Inspector's read-only Changes tab (issue #61): Staged and Unstaged groups fed by the real
- * `status` collection. A path Staged AND Unstaged (git's two-axis model, CONTEXT.md) appears in
- * BOTH groups, each row carrying only its own axis's stats — not a staged-xor-unstaged partition.
+ * The Inspector's Changes tab (issue #61; file-level staging #62): Staged and Unstaged groups fed by
+ * the real `status` collection. A path Staged AND Unstaged (git's two-axis model, CONTEXT.md) appears
+ * in BOTH groups, each row carrying only its own axis's stats — not a staged-xor-unstaged partition.
+ * Ticking an Unstaged row stages that path; unticking a Staged row unstages it; the group headers
+ * carry `Stage all` / `Unstage all`. No optimistic update — mutations invalidate the `status`
+ * collection and the checkboxes settle to git's truth (issue #62).
  *
  * Loading/error states mirror `CommitGraph`'s (skeleton rows on pending, no spinner; a centered
  * inline `role="alert"` via `matchError` on error). A clean Working tree shows a quiet empty state
- * instead of two zero-count groups. Staging interactions, Stage/Unstage all, and the commit
- * composer land in a later slice (#58's tranche ④+).
+ * instead of two zero-count groups. The commit composer lands in a later slice (#58's tranche ④+).
  */
 export function ChangesPanel() {
   const { root } = useActiveRepository();
   const { data: status, isLoading, isError, error, retry } = useStatus(root);
+  const { stageFile, unstageFile, stageAll, unstageAll } = useStaging();
 
   if (root === null) return null;
 
@@ -65,28 +69,62 @@ export function ChangesPanel() {
 
   return (
     <div className='flex flex-col'>
-      <ChangeGroup heading={messages.changesPanel.stagedHeading} count={staged.length}>
-        {staged.map((row) => (
-          <ChangeRow key={`staged:${row.path}`} path={row.path} change={row.change} />
+      <ChangeGroup
+        heading={messages.changesPanel.unstagedHeading}
+        count={unstaged.length}
+        action={{
+          label: messages.changesPanel.stageAll,
+          onClick: () => stageAll.mutate(),
+          disabled: stageAll.isPending,
+        }}
+      >
+        {unstaged.map((row) => (
+          <ChangeRow
+            key={`unstaged:${row.path}`}
+            path={row.path}
+            change={row.change}
+            checked={false}
+            onToggle={() => stageFile.mutate(row.path)}
+          />
         ))}
       </ChangeGroup>
-      <ChangeGroup heading={messages.changesPanel.unstagedHeading} count={unstaged.length}>
-        {unstaged.map((row) => (
-          <ChangeRow key={`unstaged:${row.path}`} path={row.path} change={row.change} />
+      <ChangeGroup
+        heading={messages.changesPanel.stagedHeading}
+        count={staged.length}
+        action={{
+          label: messages.changesPanel.unstageAll,
+          onClick: () => unstageAll.mutate(),
+          disabled: unstageAll.isPending,
+        }}
+      >
+        {staged.map((row) => (
+          <ChangeRow
+            key={`staged:${row.path}`}
+            path={row.path}
+            change={row.change}
+            checked
+            onToggle={() => unstageFile.mutate(row.path)}
+          />
         ))}
       </ChangeGroup>
     </div>
   );
 }
 
-/** A `STAGED n` / `UNSTAGED n` group header (DESIGN.md) plus its rows. Hidden when empty. */
+/**
+ * A `STAGED n` / `UNSTAGED n` group header (DESIGN.md) plus its rows. Hidden when empty. The header
+ * carries an optional right-aligned text action (Stage all / Unstage all) — quiet Muted Ink that
+ * brightens on hover, so it never competes with the bold heading.
+ */
 function ChangeGroup({
   heading,
   count,
+  action,
   children,
 }: {
   heading: string;
   count: number;
+  action?: { label: string; onClick: () => void; disabled?: boolean };
   children: ReactNode;
 }) {
   if (count === 0) return null;
@@ -98,6 +136,16 @@ function ChangeGroup({
         <span className='rounded-sm bg-muted px-1 py-0.5 font-mono text-[0.625rem] leading-none text-muted-foreground tabular-nums'>
           {count}
         </span>
+        {action && (
+          <button
+            type='button'
+            onClick={action.onClick}
+            disabled={action.disabled}
+            className='ml-auto font-medium text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-50'
+          >
+            {action.label}
+          </button>
+        )}
       </div>
       <div role='listbox' aria-label={heading} className='flex flex-col'>
         {children}
