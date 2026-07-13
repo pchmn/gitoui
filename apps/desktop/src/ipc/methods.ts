@@ -83,6 +83,13 @@ export function registerIpc(): void {
     ),
   );
 
+  makeIpcMethod(CHANNELS.git.commit, gitContract.commit, (payload) =>
+    GitClient.pipe(
+      Effect.flatMap((git) => git.commit(payload.repoPath, payload.message)),
+      Effect.provide(GitClient.Default),
+    ),
+  );
+
   makeIpcMethod(CHANNELS.git.listRemotes, gitContract.listRemotes, (payload) =>
     GitClient.pipe(
       Effect.flatMap((git) => git.listRemotes(payload.repoPath)),

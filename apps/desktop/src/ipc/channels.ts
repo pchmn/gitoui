@@ -19,6 +19,7 @@ export const CHANNELS = {
     unstageFile: 'git:unstageFile',
     stageAll: 'git:stageAll',
     unstageAll: 'git:unstageAll',
+    commit: 'git:commit',
     listRemotes: 'git:listRemotes',
     listTags: 'git:listTags',
     listStashes: 'git:listStashes',

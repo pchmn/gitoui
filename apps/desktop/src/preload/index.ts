@@ -6,6 +6,8 @@ import type {
 import type {
   BranchList,
   Commit,
+  CommitInput,
+  CommitResult,
   CreateBranchInput,
   ListCommitsInput,
   RemoteList,
@@ -65,6 +67,8 @@ const git = {
     invoke(CHANNELS.git.stageAll, input) as Promise<void>,
   unstageAll: (input: RepoInput): Promise<void> =>
     invoke(CHANNELS.git.unstageAll, input) as Promise<void>,
+  commit: (input: CommitInput): Promise<CommitResult> =>
+    invoke(CHANNELS.git.commit, input) as Promise<CommitResult>,
   listRemotes: (input: RepoInput): Promise<RemoteList> =>
     invoke(CHANNELS.git.listRemotes, input) as Promise<RemoteList>,
   listTags: (input: RepoInput): Promise<TagList> =>

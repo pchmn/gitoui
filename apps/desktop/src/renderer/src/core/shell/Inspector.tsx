@@ -40,7 +40,9 @@ export function Inspector() {
               {messages.inspector.treeTab}
             </TabsTab>
           </TabsList>
-          <TabsPanel value='changes' className='min-h-0 flex-1 overflow-y-auto'>
+          {/* No `overflow-y-auto` here: ChangesPanel owns its own scroll so its commit composer can
+              stay pinned as a footer while only the file lists scroll. */}
+          <TabsPanel value='changes' className='flex min-h-0 flex-1 flex-col'>
             <ChangesPanel />
           </TabsPanel>
         </TabsRoot>

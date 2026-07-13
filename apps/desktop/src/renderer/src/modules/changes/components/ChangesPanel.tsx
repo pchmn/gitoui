@@ -1,4 +1,12 @@
+import { CollapsiblePanel, CollapsibleRoot, CollapsibleTrigger } from '@gitoui/ui/collapsible';
+import {
+  CaretDownIcon,
+  CaretRightIcon,
+  CheckCircleIcon,
+  CircleDashedIcon,
+} from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
+import { useState } from 'react';
 import type { GitError } from '#renderer/shared/git/errors';
 import { messages } from '#renderer/shared/messages/messages';
 import { matchError } from '#renderer/shared/utils/matchError';
@@ -6,6 +14,7 @@ import { useActiveRepository } from '../../repository/ActiveRepositoryContext';
 import { useStaging } from '../hooks/useStaging';
 import { useStatus } from '../hooks/useStatus';
 import { ChangeRow } from './ChangeRow';
+import { CommitComposer } from './CommitComposer';
 
 /**
  * The Inspector's Changes tab (issue #61; file-level staging #62): Staged and Unstaged groups fed by
@@ -17,7 +26,18 @@ import { ChangeRow } from './ChangeRow';
  *
  * Loading/error states mirror `CommitGraph`'s (skeleton rows on pending, no spinner; a centered
  * inline `role="alert"` via `matchError` on error). A clean Working tree shows a quiet empty state
- * instead of two zero-count groups. The commit composer lands in a later slice (#58's tranche ④+).
+ * instead of two zero-count groups.
+ *
+ * Layout: the two groups scroll in a `flex-1` region while the commit composer (issue #63) stays
+ * pinned as a footer at the bottom (fed the Staged count for its "Commit N files" button), so the
+ * primary action keeps a fixed home. Both groups ALWAYS render on a dirty tree — an empty one shows
+ * a quiet Muted-Ink hint and its bulk action disabled, so the two buckets keep a stable home while
+ * files move between them. Each group header is a sticky one-step tonal band (Muted Surface — the
+ * sanctioned Canvas→Surface depth step, no borders) sharing the rail's FULL section-header grammar
+ * (RailSection): chevron + leading duotone icon + sentence-case label + mono count chip, and the
+ * group collapses on click (persisted per group, like the rail's sections) — so a long Unstaged
+ * list can fold away to reach Staged. The dashed circle on Unstaged echoes the graph's dashed WIP
+ * node (in flux); the check circle marks Staged as the settled "about to be committed" bucket.
  */
 export function ChangesPanel() {
   const { root } = useActiveRepository();
@@ -68,89 +88,141 @@ export function ChangesPanel() {
   }
 
   return (
-    <div className='flex flex-col'>
-      <ChangeGroup
-        heading={messages.changesPanel.unstagedHeading}
-        count={unstaged.length}
-        action={{
-          label: messages.changesPanel.stageAll,
-          onClick: () => stageAll.mutate(),
-          disabled: stageAll.isPending,
-        }}
-      >
-        {unstaged.map((row) => (
-          <ChangeRow
-            key={`unstaged:${row.path}`}
-            path={row.path}
-            change={row.change}
-            checked={false}
-            onToggle={() => stageFile.mutate(row.path)}
-          />
-        ))}
-      </ChangeGroup>
-      <ChangeGroup
-        heading={messages.changesPanel.stagedHeading}
-        count={staged.length}
-        action={{
-          label: messages.changesPanel.unstageAll,
-          onClick: () => unstageAll.mutate(),
-          disabled: unstageAll.isPending,
-        }}
-      >
-        {staged.map((row) => (
-          <ChangeRow
-            key={`staged:${row.path}`}
-            path={row.path}
-            change={row.change}
-            checked
-            onToggle={() => unstageFile.mutate(row.path)}
-          />
-        ))}
-      </ChangeGroup>
+    <div className='flex min-h-0 flex-1 flex-col'>
+      <div className='min-h-0 flex-1 overflow-y-auto'>
+        <ChangeGroup
+          id='unstaged'
+          icon={<CircleDashedIcon weight='duotone' />}
+          heading={messages.changesPanel.unstagedHeading}
+          count={unstaged.length}
+          emptyHint={messages.changesPanel.emptyUnstaged}
+          action={{
+            label: messages.changesPanel.stageAll,
+            onClick: () => stageAll.mutate(),
+            disabled: stageAll.isPending,
+          }}
+        >
+          {unstaged.map((row) => (
+            <ChangeRow
+              key={`unstaged:${row.path}`}
+              path={row.path}
+              change={row.change}
+              checked={false}
+              onToggle={() => stageFile.mutate(row.path)}
+            />
+          ))}
+        </ChangeGroup>
+        <ChangeGroup
+          id='staged'
+          icon={<CheckCircleIcon weight='duotone' />}
+          heading={messages.changesPanel.stagedHeading}
+          count={staged.length}
+          emptyHint={messages.changesPanel.emptyStaged}
+          action={{
+            label: messages.changesPanel.unstageAll,
+            onClick: () => unstageAll.mutate(),
+            disabled: unstageAll.isPending,
+          }}
+        >
+          {staged.map((row) => (
+            <ChangeRow
+              key={`staged:${row.path}`}
+              path={row.path}
+              change={row.change}
+              checked
+              onToggle={() => unstageFile.mutate(row.path)}
+            />
+          ))}
+        </ChangeGroup>
+      </div>
+      <CommitComposer stagedCount={staged.length} />
     </div>
   );
 }
 
+/** localStorage key for per-group open/closed state (mirrors the rail's SECTION_OPEN_KEY). */
+const GROUP_OPEN_KEY = (id: string) => `gitoui:changes-group-${id}-open`;
+
 /**
- * A `STAGED n` / `UNSTAGED n` group header (DESIGN.md) plus its rows. Hidden when empty. The header
- * carries an optional right-aligned text action (Stage all / Unstage all) — quiet Muted Ink that
- * brightens on hover, so it never competes with the bold heading.
+ * An `Unstaged n` / `Staged n` group plus its rows — ALWAYS rendered, so both buckets keep a stable
+ * home while files move between them (an empty group shows a quiet Muted-Ink hint instead of its
+ * listbox, and its bulk action disables). The header shares the rail's full section-header grammar
+ * (RailSection): chevron + leading duotone icon + sentence-case label + mono count chip, and the
+ * group **collapses on click** — so a long Unstaged list folds away to reach Staged. Open state
+ * persists per group. Unlike RailSection this is uncontrolled (no rail-filter auto-expand to
+ * override), so the group owns its own state. The bulk action (Stage all / Unstage all) sits as a
+ * SIBLING of the trigger, not inside it — a button cannot nest a button.
+ *
+ * The header is a sticky one-step tonal band (opaque Muted Surface, so scrolled rows never bleed
+ * through) — the Canvas→Surface depth mechanism doing the group separation the old whole-group
+ * fill was too faint for. No borders: tone alone marks the seam (flat-at-rest). The count chip
+ * drops to Canvas (`bg-background`) so it stays visible on the Muted band.
  */
 function ChangeGroup({
+  id,
+  icon,
   heading,
   count,
+  emptyHint,
   action,
   children,
 }: {
+  id: string;
+  icon: ReactNode;
   heading: string;
   count: number;
+  emptyHint: string;
   action?: { label: string; onClick: () => void; disabled?: boolean };
   children: ReactNode;
 }) {
-  if (count === 0) return null;
+  const [open, setOpen] = useState<boolean>(() => {
+    const stored = localStorage.getItem(GROUP_OPEN_KEY(id));
+    return stored === null ? true : stored === 'true';
+  });
+
+  function handleOpenChange(next: boolean) {
+    setOpen(next);
+    localStorage.setItem(GROUP_OPEN_KEY(id), String(next));
+  }
 
   return (
-    <div className='flex flex-col'>
-      <div className='flex h-7 items-center gap-1.5 px-3 text-xs font-bold text-muted-foreground'>
-        <span>{heading}</span>
-        <span className='rounded-sm bg-muted px-1 py-0.5 font-mono text-[0.625rem] leading-none text-muted-foreground tabular-nums'>
-          {count}
-        </span>
+    <CollapsibleRoot open={open} onOpenChange={handleOpenChange}>
+      <div className='sticky top-0 z-10 flex h-8 shrink-0 items-center bg-muted pr-3 pl-3 text-xs font-bold text-muted-foreground'>
+        <CollapsibleTrigger className='flex h-full min-w-0 flex-1 items-center gap-1.5 text-left hover:text-foreground'>
+          {open ? (
+            <CaretDownIcon className='size-3 shrink-0' aria-hidden='true' />
+          ) : (
+            <CaretRightIcon className='size-3 shrink-0' aria-hidden='true' />
+          )}
+          <span className='size-3.5 shrink-0 [&>svg]:size-3.5' aria-hidden='true'>
+            {icon}
+          </span>
+          <span>{heading}</span>
+          <span className='rounded-sm bg-background px-1 py-0.5 font-mono text-[0.625rem] leading-none text-muted-foreground tabular-nums'>
+            {count}
+          </span>
+        </CollapsibleTrigger>
         {action && (
           <button
             type='button'
             onClick={action.onClick}
-            disabled={action.disabled}
-            className='ml-auto font-medium text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-50'
+            disabled={action.disabled || count === 0}
+            className='ml-auto shrink-0 pl-2 font-medium text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-50'
           >
             {action.label}
           </button>
         )}
       </div>
-      <div role='listbox' aria-label={heading} className='flex flex-col'>
-        {children}
-      </div>
-    </div>
+      <CollapsiblePanel>
+        {count === 0 ? (
+          <p className='px-3 py-1.5 text-xs text-muted-foreground'>{emptyHint}</p>
+        ) : (
+          <div role='listbox' aria-label={heading} className='flex flex-col py-1'>
+            {children}
+          </div>
+        )}
+      </CollapsiblePanel>
+    </CollapsibleRoot>
   );
 }
 
