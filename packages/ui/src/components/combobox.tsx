@@ -149,10 +149,7 @@ function ComboboxGroupLabel({ className, ...props }: ComboboxPrimitive.GroupLabe
   return (
     <ComboboxPrimitive.GroupLabel
       data-slot='combobox-group-label'
-      className={cn(
-        'px-2 py-1.5 text-[0.625rem] font-medium tracking-wide text-muted-foreground uppercase',
-        className,
-      )}
+      className={cn('px-2 py-1.5 text-[0.625rem] font-medium text-muted-foreground', className)}
       {...props}
     />
   );

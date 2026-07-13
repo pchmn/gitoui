@@ -1,6 +1,8 @@
 import type { Branch } from '@gitoui/contracts/git';
 import { cn } from '@gitoui/ui/lib/utils';
+import { ArrowRightIcon } from '@phosphor-icons/react';
 import { useSelection } from '#renderer/core/shell/SelectionContext';
+import { messages } from '#renderer/shared/messages/messages';
 import { useSwitchBranch } from '../hooks/useSwitchBranch';
 import { AheadBehindBadge } from './AheadBehindBadge';
 
@@ -10,7 +12,10 @@ import { AheadBehindBadge } from './AheadBehindBadge';
  *
  * Single-click = select (UI focus); double-click = Switch (move HEAD). Double-click on the current
  * Branch is a no-op (already checked out). No timer or debounce — selecting then switching the same
- * row is harmless.
+ * row is harmless. A non-current row also reveals an explicit **Switch** button on hover / focus
+ * (mirroring the Changes-row `+`/`−` affordance): it makes the switch gesture discoverable for the
+ * mouse and gives keyboard users the path double-click can't (the row's own Enter/Space only ever
+ * selects).
  *
  * Shared between flat list (BranchesSection) and tree view (BranchTreeView) as leaves. Flat mode
  * shows the full `branch.name`; tree mode passes `label={segment}` so the leaf reads as just its
@@ -54,7 +59,7 @@ export function BranchRow({
     <div
       role='option'
       className={cn(
-        'flex h-7 cursor-default select-none items-center gap-1.5 px-3 text-xs hover:bg-muted rounded-sm',
+        'group relative flex h-7 cursor-default select-none items-center gap-1.5 rounded-sm px-3 text-xs outline-none hover:bg-muted focus-within:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset',
         isCurrent && 'bg-accent',
         isRowSelected && 'ring-1 ring-inset ring-primary/50',
       )}
@@ -84,7 +89,29 @@ export function BranchRow({
       <span className='min-w-0 flex-1 truncate' title={branch.name}>
         {label ?? branch.name}
       </span>
-      <AheadBehindBadge upstream={branch.upstream} ahead={branch.ahead} behind={branch.behind} />
+      <span className='relative flex shrink-0 items-center'>
+        {/* Switch action — hidden at rest, revealed on hover / focus just left of the badge with a
+            gradient fade so it never shifts the name (mirrors the Changes-row `+`/`−`). It's a real
+            focusable button, so it's the keyboard path to switch. Not rendered on the current
+            branch (nothing to switch to). */}
+        {!isCurrent && (
+          <span className='pointer-events-none absolute inset-y-0 right-full flex items-center bg-linear-to-r from-transparent to-muted to-40% pr-1.5 pl-8 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 motion-safe:transition-opacity motion-safe:duration-150'>
+            <button
+              type='button'
+              aria-label={messages.branchesSection.switchAction(branch.name)}
+              title={messages.branchesSection.switchAction(branch.name)}
+              className='flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40'
+              onClick={(e) => {
+                e.stopPropagation();
+                switchBranch(branch.name);
+              }}
+            >
+              <ArrowRightIcon weight='bold' className='size-3.5' />
+            </button>
+          </span>
+        )}
+        <AheadBehindBadge upstream={branch.upstream} ahead={branch.ahead} behind={branch.behind} />
+      </span>
     </div>
   );
 }

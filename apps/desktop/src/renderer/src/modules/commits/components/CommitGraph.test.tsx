@@ -98,7 +98,7 @@ function Wrapper({
 
 /** Scroll the virtualized scroller to `top` and flush the resulting scroll event. */
 async function scrollTo(top: number) {
-  const list = await screen.findByRole('list', { name: 'Commits' });
+  const list = await screen.findByRole('listbox', { name: 'Commits' });
   const scroller = list.parentElement;
   if (!scroller) throw new Error('CommitGraph scroll container not found');
   await act(async () => {
@@ -193,8 +193,8 @@ describe('CommitGraph ordering', () => {
     await screen.findByText('the middle one');
     // Only assert the relative order of the commit rows — a terminus row also renders (3 < PAGE_LIMIT).
     const rows = screen
-      .getAllByRole('listitem')
-      .map((li) => li.textContent ?? '')
+      .getAllByRole('option')
+      .map((row) => row.textContent ?? '')
       .filter((text) => text.includes('the '));
     expect(rows[0]).toContain('the middle one');
     expect(rows[1]).toContain('the oldest one');
@@ -428,7 +428,7 @@ describe('CommitGraph freshness', () => {
 
     // Deep into the loaded window (but shy of the load-more threshold).
     await scrollTo(100 * 32);
-    const scroller = screen.getByRole('list', { name: 'Commits' }).parentElement;
+    const scroller = screen.getByRole('listbox', { name: 'Commits' }).parentElement;
     expect(scroller?.scrollTop).toBe(100 * 32);
 
     head = makeCommitPage(5, 10_000); // the new branch's (much shorter) history.
@@ -448,7 +448,7 @@ describe('CommitGraph virtualization', () => {
 
     await screen.findByText('commit #0');
     // 600px viewport / 32px rows ≈ 19 visible + overscan on both sides — nowhere near all 300.
-    const rows = screen.getAllByRole('listitem');
+    const rows = screen.getAllByRole('option');
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.length).toBeLessThan(commits.length);
   });
@@ -492,7 +492,7 @@ describe('CommitGraph pagination', () => {
     });
     // Loading more must keep the list mounted and the scroll offset intact — the live-query
     // recompile used to flash empty, remounting the scroller at scrollTop 0.
-    const scroller = screen.getByRole('list', { name: 'Commits' }).parentElement;
+    const scroller = screen.getByRole('listbox', { name: 'Commits' }).parentElement;
     expect(scroller?.scrollTop).toBe((PAGE_LIMIT - 10) * 32);
     // Row 299 sat in both the first window and the grown one — reconciliation by sha renders it once.
     expect(screen.getAllByText('commit #299')).toHaveLength(1);
@@ -516,8 +516,8 @@ describe('CommitGraph selection', () => {
     ];
     render(<Wrapper listCommitsMock={() => Promise.resolve(commits)} />);
 
-    const firstRow = (await screen.findByText('feat: add engine')).closest('li');
-    const secondRow = screen.getByText('fix: leak').closest('li');
+    const firstRow = (await screen.findByText('feat: add engine')).closest('[role="option"]');
+    const secondRow = screen.getByText('fix: leak').closest('[role="option"]');
     if (!firstRow || !secondRow) throw new Error('commit rows not found');
 
     // Neither row starts selected.
@@ -563,19 +563,21 @@ describe('CommitGraph lanes', () => {
 
     // Every commit row carries its own per-row SVG — composition with virtualization is free.
     const rows = screen
-      .getAllByRole('listitem')
-      .filter((li) => li.querySelector('svg[data-slot="lane-graph"]'));
+      .getAllByRole('option')
+      .filter((row) => row.querySelector('svg[data-slot="lane-graph"]'));
     expect(rows).toHaveLength(4);
 
     // M is the merge commit: a hollow ring (no fill, a stroked --lane-* token), not a filled dot.
-    const mergeRow = (await screen.findByText('Merge branch F into main')).closest('li');
+    const mergeRow = (await screen.findByText('Merge branch F into main')).closest(
+      '[role="option"]',
+    );
     const mergeNode = mergeRow?.querySelector('circle[data-slot="lane-node"]');
     expect(mergeNode?.getAttribute('data-merge')).toBe('true');
     expect(mergeNode?.getAttribute('fill')).toBe('none');
     expect(mergeNode?.getAttribute('stroke')).toMatch(/^var\(--lane-[1-5]\)$/);
 
     // An ordinary commit's node is a filled dot referencing a --lane-* token.
-    const ancestorRow = screen.getByText('the common ancestor').closest('li');
+    const ancestorRow = screen.getByText('the common ancestor').closest('[role="option"]');
     const ancestorNode = ancestorRow?.querySelector('circle[data-slot="lane-node"]');
     expect(ancestorNode?.getAttribute('data-merge')).toBe('false');
     expect(ancestorNode?.getAttribute('fill')).toMatch(/^var\(--lane-[1-5]\)$/);
@@ -632,8 +634,12 @@ describe('CommitGraph lanes', () => {
     ];
     render(<Wrapper listCommitsMock={() => Promise.resolve(commits)} />);
 
-    const mainRow = (await screen.findByText('on the main line')).closest('li');
-    const forkedRow = screen.getByText('forked work').closest('li');
+    const mainRow = (await screen.findByText('on the main line')).closest(
+      '[role="option"]',
+    ) as HTMLElement | null;
+    const forkedRow = screen
+      .getByText('forked work')
+      .closest('[role="option"]') as HTMLElement | null;
     if (!mainRow || !forkedRow) throw new Error('rows not found');
 
     // At rest, lines sit at the light translucency; nodes (the Commits) stay fully opaque.
@@ -680,7 +686,9 @@ describe('CommitGraph lanes', () => {
 
       // Moving along the highlighted run's OWN rows hands the highlight over seamlessly — no
       // reset, no re-arm delay: the branch stays lit while the pointer walks it.
-      const ancestorRow = screen.getByText('the ancestor').closest('li');
+      const ancestorRow = screen
+        .getByText('the ancestor')
+        .closest('[role="option"]') as HTMLElement | null;
       if (!ancestorRow) throw new Error('ancestor row not found');
       fireEvent.mouseOut(mainRow, { relatedTarget: ancestorRow });
       expect(mainRow.getAttribute('data-run-member')).toBe('true');
@@ -723,7 +731,7 @@ describe('CommitGraph lanes', () => {
     );
     render(<Wrapper listCommitsMock={() => Promise.resolve(commits)} />);
 
-    const firstRow = (await screen.findByText('tip 0')).closest('li');
+    const firstRow = (await screen.findByText('tip 0')).closest('[role="option"]');
     const viewport = firstRow?.querySelector('[data-slot="lanes-viewport"]') as HTMLElement | null;
     const svg = viewport?.querySelector('svg[data-slot="lane-graph"]');
     if (!viewport || !svg) throw new Error('lanes viewport not found');
@@ -819,7 +827,9 @@ describe('CommitGraph WIP row', () => {
     const wipRow = (await screen.findByText('Uncommitted changes')).closest(
       '[data-slot="wip-row"]',
     ) as HTMLElement;
-    const commitRow = screen.getByText('feat: add engine').closest('li') as HTMLElement;
+    const commitRow = screen
+      .getByText('feat: add engine')
+      .closest('[role="option"]') as HTMLElement;
     expect(wipRow.getAttribute('data-selected')).toBe('false');
     expect(commitRow.getAttribute('data-selected')).toBe('false');
 
@@ -843,5 +853,149 @@ describe('CommitGraph WIP row', () => {
     });
     expect(wipRow.getAttribute('data-selected')).toBe('false');
     expect(commitRow.getAttribute('data-selected')).toBe('false');
+  });
+});
+
+describe('CommitGraph keyboard navigation', () => {
+  const dirtyStatus: Status = {
+    branch: 'main',
+    ahead: 0,
+    behind: 0,
+    entries: [{ path: 'a.ts', unstaged: { kind: 'modified', additions: 1, deletions: 0 } }],
+  };
+
+  const isSelected = (subject: string) =>
+    screen.getByText(subject).closest('[role="option"]')?.getAttribute('data-selected') === 'true';
+
+  it('moves the selection to the next/previous commit with ArrowDown/ArrowUp', async () => {
+    const commits = [
+      makeCommit({ sha: 'c0', subject: 'newest' }),
+      makeCommit({ sha: 'c1', subject: 'middle', committedAt: 2_000 }),
+      makeCommit({ sha: 'c2', subject: 'oldest', committedAt: 1_000 }),
+    ];
+    render(<Wrapper listCommitsMock={() => Promise.resolve(commits)} />);
+
+    const row0 = (await screen.findByText('newest')).closest('[role="option"]') as HTMLElement;
+    fireEvent.click(row0);
+    expect(isSelected('newest')).toBe(true);
+
+    fireEvent.keyDown(row0, { key: 'ArrowDown' });
+    expect(isSelected('middle')).toBe(true);
+    expect(isSelected('newest')).toBe(false);
+
+    fireEvent.keyDown(screen.getByText('middle'), { key: 'ArrowDown' });
+    expect(isSelected('oldest')).toBe(true);
+
+    fireEvent.keyDown(screen.getByText('oldest'), { key: 'ArrowUp' });
+    expect(isSelected('middle')).toBe(true);
+  });
+
+  it('clamps at the last loaded commit on ArrowDown (no wrap)', async () => {
+    const commits = [
+      makeCommit({ sha: 'c0', subject: 'newest' }),
+      makeCommit({ sha: 'c1', subject: 'oldest', committedAt: 1_000 }),
+    ];
+    render(<Wrapper listCommitsMock={() => Promise.resolve(commits)} />);
+
+    const last = (await screen.findByText('oldest')).closest('[role="option"]') as HTMLElement;
+    fireEvent.click(last);
+    fireEvent.keyDown(last, { key: 'ArrowDown' });
+    expect(isSelected('oldest')).toBe(true);
+  });
+
+  it('steps onto the WIP row from the first commit and clamps there', async () => {
+    render(
+      <Wrapper
+        listCommitsMock={() => Promise.resolve([makeCommit({ sha: 'c0', subject: 'newest' })])}
+        statusMock={() => Promise.resolve(dirtyStatus)}
+      />,
+    );
+
+    const row0 = (await screen.findByText('newest')).closest('[role="option"]') as HTMLElement;
+    const wipRow = screen
+      .getByText('Uncommitted changes')
+      .closest('[data-slot="wip-row"]') as HTMLElement;
+    fireEvent.click(row0);
+    expect(row0.getAttribute('data-selected')).toBe('true');
+
+    // Up from the first commit lands on the WIP row...
+    fireEvent.keyDown(row0, { key: 'ArrowUp' });
+    expect(wipRow.getAttribute('data-selected')).toBe('true');
+    expect(row0.getAttribute('data-selected')).toBe('false');
+
+    // ...and Up again clamps there (no wrap past the top).
+    fireEvent.keyDown(wipRow, { key: 'ArrowUp' });
+    expect(wipRow.getAttribute('data-selected')).toBe('true');
+
+    // Down returns to the first commit.
+    fireEvent.keyDown(wipRow, { key: 'ArrowDown' });
+    expect(row0.getAttribute('data-selected')).toBe('true');
+  });
+
+  it('focuses the WIP row on click so arrow keys step from it (macOS button-focus quirk)', async () => {
+    render(
+      <Wrapper
+        listCommitsMock={() => Promise.resolve([makeCommit({ sha: 'c0', subject: 'newest' })])}
+        statusMock={() => Promise.resolve(dirtyStatus)}
+      />,
+    );
+
+    const wipRow = (await screen.findByText('Uncommitted changes')).closest(
+      '[data-slot="wip-row"]',
+    ) as HTMLElement;
+    fireEvent.click(wipRow);
+    // Clicking a <button> doesn't focus it on macOS — the row pulls focus itself so ↓ reaches its
+    // key handler instead of scrolling.
+    expect(document.activeElement).toBe(wipRow);
+
+    fireEvent.keyDown(wipRow, { key: 'ArrowDown' });
+    const row0 = screen.getByText('newest').closest('[role="option"]') as HTMLElement;
+    expect(row0.getAttribute('data-selected')).toBe('true');
+  });
+});
+
+describe('CommitGraph selection vs hover', () => {
+  const twoRunCommits = () => [
+    makeCommit({
+      sha: 'M',
+      parents: ['B', 'F'],
+      subject: 'the merge',
+      refs: [{ _tag: 'Branch', name: 'main', current: true }],
+      committedAt: 4_000,
+    }),
+    makeCommit({ sha: 'B', parents: ['A'], subject: 'on the main line', committedAt: 3_000 }),
+    makeCommit({
+      sha: 'F',
+      parents: ['A'],
+      subject: 'forked work',
+      refs: [{ _tag: 'Branch', name: 'feat/forked-branch-name', current: false }],
+      committedAt: 2_000,
+    }),
+    makeCommit({ sha: 'A', parents: [], subject: 'the ancestor', committedAt: 1_000 }),
+  ];
+
+  it('keeps the selected row fully legible while another run is hover-highlighted', async () => {
+    render(<Wrapper listCommitsMock={() => Promise.resolve(twoRunCommits())} />);
+
+    const mainRow = (await screen.findByText('on the main line')).closest(
+      '[role="option"]',
+    ) as HTMLElement;
+    const forkedRow = screen.getByText('forked work').closest('[role="option"]') as HTMLElement;
+
+    // Select the commit on the main run, then hover-highlight the forked run.
+    fireEvent.click(mainRow);
+
+    vi.useFakeTimers();
+    try {
+      fireEvent.mouseOver(forkedRow);
+      act(() => vi.advanceTimersByTime(600));
+
+      // The selected main-run row is NOT a member of the forked run, but selection outranks hover:
+      // its subject stays full while an unselected non-member row (the merge) recedes to 50%.
+      expect(screen.getByText('on the main line').className).not.toContain('opacity-50');
+      expect(screen.getByText('the merge').className).toContain('opacity-50');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

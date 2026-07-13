@@ -146,8 +146,9 @@ describe('BranchesSection tree mode', () => {
     expect(options[0]?.textContent?.trim()).toBe('logout');
 
     // Its two ancestor folders (feature/ then auth/) are shown and auto-expanded; the non-matching
-    // siblings ('main', 'feature/pay-fallback', 'feature/auth/login') are hidden.
-    const folders = screen.getAllByRole('button');
+    // siblings ('main', 'feature/pay-fallback', 'feature/auth/login') are hidden. Scope to the
+    // disclosure buttons (they carry aria-expanded) so the per-row Switch buttons don't count.
+    const folders = screen.getAllByRole('button', { expanded: true });
     expect(folders).toHaveLength(2);
     for (const folder of folders) {
       expect(folder.getAttribute('aria-expanded')).toBe('true');
@@ -179,7 +180,9 @@ describe('BranchesSection tree mode — current group', () => {
     // On load the feat/ group is open, the current branch is visible (and floated to the top), and
     // the group is NOT marked (no need — the current row is on screen).
     await screen.findByText('25-tree');
-    const featFolder = screen.getByRole('button');
+    // The folder disclosure button is the expandable one; per-row Switch buttons carry no
+    // aria-expanded, so scope to it.
+    const featFolder = screen.getByRole('button', { expanded: true });
     expect(featFolder.getAttribute('aria-expanded')).toBe('true');
     expect(screen.queryByTitle(/contains the current branch/i)).toBeNull();
 

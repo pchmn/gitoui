@@ -1,17 +1,20 @@
 import type { Commit, Ref, StatusEntry } from '@gitoui/contracts/git';
-import { IdentityAvatar } from '@gitoui/ui/identity-avatar';
 import { cn } from '@gitoui/ui/lib/utils';
 import { RefPill } from '@gitoui/ui/ref-pill';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
-import { CHANGE_ICON, CHANGE_TONE } from '#renderer/modules/changes/components/changeGlyph';
+import { CHANGE_ICON, CHANGE_LETTER_TONE } from '#renderer/modules/changes/components/changeGlyph';
 import { useStatus } from '#renderer/modules/changes/hooks/useStatus';
-import { useCommitSelection } from '#renderer/modules/commits/CommitSelectionContext';
+import {
+  type CommitSelection,
+  useCommitSelection,
+} from '#renderer/modules/commits/CommitSelectionContext';
 import type { GitError } from '#renderer/shared/git/errors';
 import { messages } from '#renderer/shared/messages/messages';
 import { matchError } from '#renderer/shared/utils/matchError';
 import { formatRelativeTime } from '#renderer/shared/utils/relativeTime';
 import { useCommits } from '../hooks/useCommits';
+import { AuthorAvatar } from './AuthorAvatar';
 import type { Frontier, LayoutRow, Transition } from './laneLayout';
 import { laneLayout } from './laneLayout';
 import { computeLaneRuns, runAt } from './laneRuns';
@@ -217,9 +220,11 @@ type HoverState = {
  * loads a first page instantly, and scrolling toward the loaded end requests the next one. Columns
  * per DESIGN.md `GRAPH · REFS` / `COMMIT` / `AUTHOR` — GRAPH · REFS carries a fixed-width REFS zone
  * (ref pills, issue #43) followed by the lanes zone at a fixed origin (colored lanes, nodes, and
- * merge/branch edges, issue #56, over `laneLayout` from #55), COMMIT shows the subject, AUTHOR shows
- * a relative date + the author's circular avatar + name — the name truncates at a fixed width so
- * the column keeps its rhythm, and hovering the row reveals it in full. Clicking a row selects its
+ * merge/branch edges, issue #56, over `laneLayout` from #55), COMMIT shows the subject, AUTHOR
+ * rests as just a relative date + the author's circular avatar pinned at the row's right edge —
+ * the name is hidden until the row is hovered or selected, then appears to the avatar's right,
+ * nudging the date + avatar left (the avatar's identity color carries "who" down the column at
+ * rest). Clicking a row selects its
  * Commit (issue
  * #46, via `CommitSelectionContext`) — every row fill is a step of the lane-tint ladder, selection
  * being the strongest, persistent one (it outranks hover), per DESIGN.md's Commit-Graph spec.
@@ -360,6 +365,73 @@ export function CommitGraph({ root }: { root: string }) {
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [selection, select]);
 
+  // Arrow-key navigation: ↑/↓ move the selection to the previous/next Commit instead of scrolling
+  // the viewport. Driven off `selection` (app state), not DOM focus, so it survives rows
+  // virtualizing in and out. The WIP row sits at the top of the sequence and both ends clamp — no
+  // wrap. The handler lives on the scroll container (below) so it fires whether focus is on the WIP
+  // button or a Commit row, and only when the graph itself holds focus (arrows elsewhere untouched).
+  function selectAndReveal(next: CommitSelection) {
+    select(next);
+    if (next.kind === 'workingTree') {
+      virtualizer.scrollToOffset(0);
+    } else {
+      const idx = (commits ?? NO_COMMITS).findIndex((c) => c.sha === next.sha);
+      if (idx >= 0) virtualizer.scrollToIndex(idx);
+    }
+    // The target may have only just mounted after scrolling — pull focus on the next frame so the
+    // focus ring follows the selection and the next key still lands on the graph. `preventScroll`
+    // leaves scrolling to the virtualizer above.
+    requestAnimationFrame(() => {
+      const el =
+        next.kind === 'workingTree'
+          ? scrollRef.current?.querySelector('[data-slot="wip-row"]')
+          : scrollRef.current?.querySelector(`[data-commit-sha="${next.sha}"]`);
+      if (el instanceof HTMLElement) el.focus({ preventScroll: true });
+    });
+  }
+
+  function moveSelection(direction: 1 | -1) {
+    const list = commits ?? NO_COMMITS;
+    const firstSha = list[0]?.sha;
+    if (firstSha === undefined) return;
+    const first: CommitSelection = { kind: 'commit', sha: firstSha };
+    // The top of the sequence: the WIP row when the tree is dirty, else the first Commit.
+    const top: CommitSelection = hasWip ? { kind: 'workingTree' } : first;
+
+    if (selection === null) return selectAndReveal(top);
+
+    if (direction === -1) {
+      if (selection.kind === 'workingTree') return; // already at the top — clamp
+      const i = list.findIndex((c) => c.sha === selection.sha);
+      if (i <= 0) return selectAndReveal(top); // from the first Commit → WIP (or clamp on a clean tree)
+      const prev = list[i - 1];
+      if (prev) return selectAndReveal({ kind: 'commit', sha: prev.sha });
+      return;
+    }
+
+    // direction === 1 (down)
+    if (selection.kind === 'workingTree') return selectAndReveal(first);
+    const i = list.findIndex((c) => c.sha === selection.sha);
+    if (i < 0) return selectAndReveal(first);
+    if (i >= list.length - 1) return; // last loaded Commit — clamp
+    const nextCommit = list[i + 1];
+    if (nextCommit) return selectAndReveal({ kind: 'commit', sha: nextCommit.sha });
+  }
+
+  // Attached to the role-bearing surfaces (the listbox and the WIP button — not the static scroll
+  // container, which a11y rules rightly forbid interaction handlers on): ↑/↓ move the selection,
+  // preventDefault stops the native scroll. Structural param type so one handler fits both a div's
+  // and a button's `onKeyDown`.
+  const onArrowKeyDown = (event: { key: string; preventDefault: () => void }) => {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      moveSelection(1);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      moveSelection(-1);
+    }
+  };
+
   // Loading state — show skeleton rows, no spinner. Only without data: growing the loaded window
   // recompiles the live query, and the already-loaded rows must keep showing through it.
   if (isLoading && (commits === undefined || commits.length === 0)) {
@@ -419,12 +491,18 @@ export function CommitGraph({ root }: { root: string }) {
           summary={wip}
           selected={selection?.kind === 'workingTree'}
           onSelect={() => select({ kind: 'workingTree' })}
+          onKeyDown={onArrowKeyDown}
         />
       )}
-      <ul
+      {/* role="listbox" (on a div, not <ul>, per Biome's noNoninteractiveElementToInteractiveRole —
+          same reason BranchesSection uses a div): the commit rows are selectable options, so they
+          need list semantics + a keyboard path, not a static list. */}
+      <div
+        role='listbox'
         className='relative w-full'
         style={{ height: virtualizer.getTotalSize() }}
         aria-label='Commits'
+        onKeyDown={onArrowKeyDown}
       >
         {virtualItems.map((virtualRow) => {
           const style = {
@@ -443,7 +521,7 @@ export function CommitGraph({ root }: { root: string }) {
           // indicator or the quiet end-of-history terminus — no fanfare either way.
           if (virtualRow.index >= rowCount) {
             return (
-              <li
+              <div
                 key='footer'
                 style={style}
                 className='flex items-center justify-center text-xs text-muted-foreground'
@@ -452,7 +530,7 @@ export function CommitGraph({ root }: { root: string }) {
                 {isFetchingNextPage
                   ? messages.commitGraph.loadingMore
                   : messages.commitGraph.endOfHistory}
-              </li>
+              </div>
             );
           }
 
@@ -465,7 +543,9 @@ export function CommitGraph({ root }: { root: string }) {
           const isRunMember = hoveredCommitRows?.has(virtualRow.index) ?? false;
           // While a run is hovered, only its own Commits stay fully legible — the other rows'
           // subject + author recede a touch so the branch reads as the foreground set.
-          const isContentDimmed = hover !== null && !isRunMember;
+          // Selection outranks hover (DESIGN §Commit Graph): the selected row stays fully legible
+          // even while another run is hover-highlighted — it never recedes into the dimmed set.
+          const isContentDimmed = hover !== null && !isRunMember && !isRowSelected;
           const highlightCol =
             hoveredRun !== null &&
             virtualRow.index >= hoveredRun.fromRow &&
@@ -517,8 +597,12 @@ export function CommitGraph({ root }: { root: string }) {
           const ghostLabel = commit.refs.length === 0 ? (rowRun?.label ?? null) : null;
 
           return (
-            <li
+            <div
               key={commit.sha}
+              role='option'
+              tabIndex={0}
+              aria-selected={isRowSelected}
+              data-commit-sha={sha}
               // DESIGN §Commit Graph: every row fill is the row's own lane color at a step of
               // the tint ladder — rest, run member, hover, selected (strongest, persistent) —
               // so a selected row reads as part of a highlighted run rather than breaking out
@@ -534,7 +618,7 @@ export function CommitGraph({ root }: { root: string }) {
                 } as CSSProperties
               }
               className={cn(
-                'group relative flex cursor-default items-center gap-3 border-b border-border/50 px-3 text-xs',
+                'group relative flex cursor-default items-center gap-3 border-b border-border/50 px-3 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset',
                 isRowSelected
                   ? 'bg-(--row-tint-selected)'
                   : 'bg-(--row-tint) hover:bg-(--row-tint-hover)',
@@ -636,24 +720,20 @@ export function CommitGraph({ root }: { root: string }) {
               >
                 <span className='shrink-0'>{formatRelativeTime(commit.authoredAt)}</span>
                 •
-                <IdentityAvatar
-                  name={commit.author.name}
-                  seed={commit.author.email}
-                  shape='circle'
-                />
-                {/* Truncated at a fixed width at rest so the AUTHOR column keeps its rhythm;
-                    hovering the row reveals the full name in place — the subject (already
-                    truncating) absorbs the squeeze. The rest width stays as a minimum so a
-                    short name never shifts the date/avatar; capped so a pathological name
-                    can't eat the row. */}
-                <span className='w-16 truncate group-hover:w-auto group-hover:min-w-16 group-hover:max-w-48'>
+                <AuthorAvatar name={commit.author.name} email={commit.author.email} />
+                {/* Hidden at rest — the avatar's identity color already answers "who" down the
+                    column; the name is the on-demand layer, revealed to the avatar's right when
+                    the row is hovered or selected, nudging the `1d • avatar` cluster left while
+                    the subject (already truncating) absorbs the squeeze. Capped so a
+                    pathological name can't eat the row. */}
+                <span className='hidden max-w-48 truncate group-hover:inline group-data-[selected=true]:inline'>
                   {commit.author.name}
                 </span>
               </span>
-            </li>
+            </div>
           );
         })}
-      </ul>
+      </div>
       {lanesOverflow && (
         <div
           ref={lanesScrollRef}
@@ -841,12 +921,13 @@ function GraphLanesRow({
   );
 }
 
-/** A file-count chip for the WIP summary: the shared change icon + a count, tinted per bucket. */
+/** A file-count chip for the WIP summary: the shared change icon + a count, in the same pastel
+    `--git-*` tone as the Changes panel's status letters — one hue per kind, everywhere. */
 function WipCount({ kind, count }: { kind: 'modified' | 'added' | 'deleted'; count: number }) {
   const Icon = CHANGE_ICON[kind];
   return (
     <span
-      className={cn('flex items-center gap-0.5', CHANGE_TONE[kind])}
+      className={cn('flex items-center gap-0.5', CHANGE_LETTER_TONE[kind])}
       data-slot='wip-filecount'
       data-kind={kind}
     >
@@ -861,10 +942,11 @@ function WipCount({ kind, count }: { kind: 'modified' | 'added' | 'deleted'; cou
  * columns — no ref pill (the dotted node + a persistent stronger tint carry it), a HOLLOW DASHED
  * node in the HEAD Commit's lane column with a short dashed connector dropping toward row 0 (a purely
  * presentational overlay, never part of the lane sweep or frontier), the "Uncommitted changes"
- * subject, and — where a Commit row shows author + time — its change **summary**: file counts by
- * type (the same icons as the Changes panel) and the aggregate `+N −N` lines. No timestamp: the row
- * is always "now". Selecting it anchors the Inspector's Changes mode; selected styling mirrors a
- * Commit row's (the strongest tint step).
+ * subject, and — right beside the subject, not pushed to the row's far edge — its change
+ * **summary**: file counts by type (the same icons AND pastel `--git-*` tones as the Changes
+ * panel) and the aggregate `+N −N` lines. No timestamp: the row is always "now". Selecting it
+ * anchors the Inspector's Changes mode; selected styling mirrors a Commit row's (the strongest
+ * tint step).
  */
 function WipRow({
   col,
@@ -873,6 +955,7 @@ function WipRow({
   summary,
   selected,
   onSelect,
+  onKeyDown,
 }: {
   col: number;
   lanesWidth: number;
@@ -886,6 +969,8 @@ function WipRow({
   };
   selected: boolean;
   onSelect: () => void;
+  /** ↑/↓ arrow navigation shared with the Commit listbox (the WIP row is the top of the sequence). */
+  onKeyDown: (event: { key: string; preventDefault: () => void }) => void;
 }) {
   const { additions, deletions, modified, added, deleted } = summary;
   const half = ROW_HEIGHT_PX / 2;
@@ -909,13 +994,20 @@ function WipRow({
         } as CSSProperties
       }
       className={cn(
-        'group relative flex h-8 w-full cursor-default items-center gap-3 border-b border-border/50 px-3 text-left text-xs',
+        'group relative flex h-8 w-full cursor-default items-center gap-3 border-b border-border/50 px-3 text-left text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset',
         selected ? 'bg-(--row-tint-selected)' : 'bg-(--row-tint) hover:bg-(--row-tint-hover)',
       )}
       data-slot='wip-row'
       data-selected={selected}
       aria-label={messages.commitGraph.wipSubject}
-      onClick={onSelect}
+      // macOS doesn't focus a <button> on click (unlike the Commit rows' focusable <div>s), so pull
+      // focus explicitly — otherwise the row's own onKeyDown never fires and ↓ scrolls instead of
+      // stepping to the first Commit. preventScroll leaves any scrolling to the arrow handler.
+      onClick={(e) => {
+        onSelect();
+        e.currentTarget.focus({ preventScroll: true });
+      }}
+      onKeyDown={onKeyDown}
     >
       {/* Empty REFS zone — the WIP row wears no pill (the dotted node + the persistent stronger
           tint carry it; "WIP" is dev jargon the subject already says plainly). Its fixed width keeps
@@ -959,10 +1051,12 @@ function WipRow({
           />
         </svg>
       </span>
-      <span className='min-w-0 flex-1 truncate font-medium'>{messages.commitGraph.wipSubject}</span>
-      {/* Change summary: file counts by type, then a hairline dot, then the aggregate lines. Any
-          zero bucket / axis is omitted. No timestamp — the WIP row is always "now". */}
-      <span className='flex shrink-0 items-center gap-2 font-mono text-[0.625rem] tabular-nums'>
+      <span className='shrink-0 font-medium'>{messages.commitGraph.wipSubject}</span>
+      {/* Change summary: file counts by type, then a hairline dot, then the aggregate lines — worn
+          in the Changes panel's pastel `--git-*` tones and sitting right beside the subject (the
+          row's one piece of content reads as a unit; the right edge stays quiet). Any zero bucket /
+          axis is omitted. No timestamp — the WIP row is always "now". */}
+      <span className='flex min-w-0 shrink items-center gap-2 ml-2 overflow-hidden font-mono text-[0.625rem] tabular-nums'>
         {(modified > 0 || added > 0 || deleted > 0) && (
           <span className='flex items-center gap-2'>
             {modified > 0 && <WipCount kind='modified' count={modified} />}
@@ -976,8 +1070,8 @@ function WipRow({
               ·
             </span>
             <span className='flex items-center gap-1.5'>
-              {additions > 0 && <span className='text-success'>+{additions}</span>}
-              {deletions > 0 && <span className='text-destructive'>−{deletions}</span>}
+              {additions > 0 && <span className='text-git-added'>+{additions}</span>}
+              {deletions > 0 && <span className='text-git-deleted'>−{deletions}</span>}
             </span>
           </>
         )}

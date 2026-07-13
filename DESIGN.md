@@ -239,16 +239,30 @@ from a competing typeface.
   prose at 65–75ch; data rows and the graph run denser.
 - **Label** (500, 0.75rem / `text-xs`, lh ~1.6): the workhorse — buttons, field labels, list rows,
   the repository rail, branch names. Most of the UI lives here.
-- **Micro** (500, 0.625rem / 10px, `+0.01em`): badges, `+N / −N` diff stats, `xs` buttons, ref
-  pills. The smallest readable step; never smaller.
-- **Mono** (DM Mono, 400, 0.8125rem / 13px, lh 1.6): code, diffs, and raw file content only —
-  never UI labels. Line numbers sit in Muted Ink; the code itself in Ink.
+- **Micro** (500, 0.625rem / 10px, `+0.01em`): badge and ref-pill text, `xs` buttons, and the
+  smallest UI labels. The smallest readable step; never smaller. (The *numeric* badges — count
+  chips, `+N / −N` stats — sit at this size but are set in DM Mono for tabular alignment; see the
+  Mono line and the Tabular Numeral Rule.)
+- **Mono** (DM Mono, 400, 0.8125rem / 13px, lh 1.6): code, diffs, and raw file content — line
+  numbers in Muted Ink, the code itself in Ink. Also the app's **tabular numerals**: count chips,
+  `+N / −N` diff stats, the 72-char commit-subject countdown, and commit SHAs, rendered at Micro
+  size (0.625rem) with `tabular-nums` so dense, changing figures stay aligned. Never sets a word or
+  label — numerals and code only (see the Tabular Numeral Rule).
 
 ### Named Rules
 **The Two-Family Rule.** DM Sans carries the entire interface — headings, body, labels, data, and
-buttons. DM Mono is the *only* sanctioned second family, and only for rendering real code, diffs,
-and file content (the documented exception this rule always reserved). No third family, no display
-serif, no decorative face: if text isn't code, it's DM Sans.
+buttons. DM Mono is the *only* sanctioned second family, reserved for two things: rendering real
+code, diffs, and file content; and the app's **tabular numerals** (see the Tabular Numeral Rule).
+No third family, no display serif, no decorative face: if text isn't code or a numeral, it's DM
+Sans — and DM Mono never sets a word or label.
+
+**The Tabular Numeral Rule.** Every **bare numeral** in dense chrome is DM Mono with `tabular-nums`,
+at Micro size: count chips on section headers, `+N / −N` diff stats, the 72-char commit-subject
+countdown, commit SHAs, and inline counts like the graph's and rail's ahead/behind (`↑2 ↓1`) and the
+status bar's counts. A scoped extension of the Two-Family Rule, not a breach: mono is spent for its
+fixed-width figures, so columns align and digits don't jitter as they change. The one carve-out is a
+numeral fused to a word in a running phrase (e.g. the status bar's "N changed") — that stays DM Sans,
+because mono never sets a word. Bare numerals go mono; numerals inside prose don't.
 
 **The Fixed Scale Rule.** Sizes are a fixed rem scale, never `clamp()`. A tool is viewed at a
 consistent DPI; fluid headings that shrink inside a panel look broken, not responsive.
@@ -370,11 +384,9 @@ The right panel is one tabbed surface with two modes:
   right, a single status letter** (`A`/`M`/`D`/`R`/`U`) is always shown, tinted by kind in **Pierre's
   soft git-status palette**: **blue** for modified, **green** for add / untracked, **gold** for
   renamed, **red** for delete — the pastel `--git-*` tokens, a fixed-width column so the letters line
-  up (`CHANGE_LETTER_TONE`; the `+N`/`−N` stats use the same green/red). This per-kind hue is a
-  deliberate,
-  scoped exception to the graph's quieter policy: the Changes panel is a dense staging surface where
-  color-by-status speeds scanning; the graph's WIP-row summary keeps the quieter `CHANGE_TONE`
-  (modified stays Muted Ink there). The resting row is quiet: on **hover / focus** a
+  up (`CHANGE_LETTER_TONE`; the `+N`/`−N` stats use the same green/red). The graph's WIP-row summary
+  chips wear the same soft per-kind hue, so a change kind reads identically everywhere it's counted.
+  The resting row is quiet: on **hover / focus** a
   right cluster fades in just left of the letter, carrying the `+N` / `−N` Micro stats (a side shown
   only when it moved; binary / untracked show none) and a single **stage / unstage action** — a `+`
   icon button when Unstaged, `−` when Staged — absolutely placed with a gradient fade so they never
@@ -414,8 +426,12 @@ tinted line backgrounds with a `+` / `−` gutter (see Colors → Semantic). It 
 pane, not a colorful playground.
 
 ### Identity avatars
-- **Author avatar:** a small circle (≈`size-5`) with the author's initials in Micro text on a
-  deterministic identity-color fill, shown in the graph's `AUTHOR` column.
+- **Author avatar:** a small circle (≈`size-5`) in the graph's `AUTHOR` column. When the commit
+  *publicly* implies a GitHub account — a noreply author email carrying the username, or an
+  author name shaped exactly like a GitHub username — it shows the author's **real GitHub
+  profile photo**; a real email address never leaves the machine in any form (no Gravatar,
+  ADR 0014). Otherwise — and while the photo loads, or when it fails — it shows the author's
+  initials in Micro text on a deterministic identity-color fill.
 - **Repository avatar:** a `rounded-sm` tile with the repo's initial, same identity-color system,
   shown in the repository selector and the top bar.
 Both draw from the bounded identity palette (Colors → Identity); the color is functional (scanning
@@ -428,11 +444,17 @@ the lane color. The current row (Uncommitted / WIP) wears **no ref pill** — a 
 in the HEAD lane, a short dashed connector into the first Commit, and a **persistent stronger tint**
 (the run-member step, not the 6% rest) mark it as the live Working-tree state even at rest; hover and
 selection escalate it exactly like a Commit row. "WIP" as a label is dev jargon the subject
-("Uncommitted changes") already says plainly. Where a Commit row shows author + time, the WIP row
-shows its change **summary** — file counts by type (the Changes-panel icons) and the aggregate
-`+N −N` lines — with no timestamp (it is always "now").
+("Uncommitted changes") already says plainly. Its change **summary** — file counts by type, in the
+Changes-panel icons AND its pastel `--git-*` tones, plus the aggregate `+N −N` lines — sits right
+beside the subject rather than at the row's far edge (the row's one piece of content reads as a
+unit; the right edge stays quiet), with no timestamp (it is always "now").
 - **Legibility is non-negotiable.** Lanes must stay distinguishable by **position + lightness +
   ref label**, so the graph reads for color-blind users and survives a low-chroma source.
+- **Keyboard-navigable, not just clickable.** The rows are a `listbox` of `option`s (on divs, per
+  the interactive-role rule): each is focusable, and **↑ / ↓ move the selection** to the previous /
+  next Commit (scrolling it into view) rather than scrolling the viewport. The WIP row sits at the
+  top of that sequence; both ends **clamp** (no wrap). Selection, not pointer focus, drives it, so it
+  survives rows virtualizing in and out — the protagonist surface is fully operable without a mouse.
 - Because lane chroma follows the source, enforce a **minimum lane chroma and clear lightness
   steps** so lanes never collapse into one another when the user picks a desaturated tint.
 - **The lanes zone caps at a max width** (12 columns) and pans horizontally behind one shared,
@@ -459,10 +481,11 @@ shows its change **summary** — file counts by type (the Changes-panel icons) a
   the REFS zone — ellipsized like any pill and faded to 60%, contextual info rather than a real
   ref; the zone hover extends it full and solid. When no Ref names the line (its Branch merged
   and deleted, or its tip beyond the loaded window), the name is recovered from git's
-  conventional merge subject (`Merge branch 'X' into Y`); a real Ref always wins. Hovering the
-  row also unfolds the author's full name in place (the AUTHOR column holds a fixed truncated
-  width at rest so the column keeps its rhythm; the subject, which already truncates, absorbs
-  the squeeze — nothing is covered).
+  conventional merge subject (`Merge branch 'X' into Y`); a real Ref always wins. The AUTHOR
+  zone rests as just the relative time + avatar, pinned at the row's right edge — the avatar's
+  identity color answers "who" down the column. Hovering or selecting the row reveals the
+  author's name to the avatar's right, nudging the time + avatar left (the subject, which
+  already truncates, absorbs the squeeze — nothing is covered).
 - **Hovering a Commit row (or one of its ref pills) reads its branch as a unit**: the lane run
   the Commit rides (tip to fork point) lifts — its Commits' rows take the stronger lane tint and
   stay fully legible, the line goes fully opaque across its whole range at unchanged weight (the

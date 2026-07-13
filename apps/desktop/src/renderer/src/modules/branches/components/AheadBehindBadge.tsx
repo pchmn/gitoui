@@ -14,7 +14,7 @@ export function AheadBehindBadge({
 }) {
   if (!upstream || (ahead === 0 && behind === 0)) return null;
   return (
-    <span className='ml-auto flex shrink-0 items-center gap-0.5 text-[0.625rem] text-muted-foreground'>
+    <span className='ml-auto flex shrink-0 items-center gap-0.5 font-mono text-[0.625rem] text-muted-foreground tabular-nums'>
       {ahead > 0 && <span>↑{ahead}</span>}
       {behind > 0 && <span>↓{behind}</span>}
     </span>

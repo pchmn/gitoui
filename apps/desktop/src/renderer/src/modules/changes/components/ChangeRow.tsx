@@ -60,7 +60,7 @@ export function ChangeRow({
             so they read cleanly over the name's end. */}
         <span className='pointer-events-none absolute inset-y-0 right-full flex items-center gap-2 bg-linear-to-r from-transparent to-muted to-40% pr-2 pl-10 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 motion-safe:transition-opacity motion-safe:duration-150'>
           {hasStats && (
-            <span className='flex items-center gap-1.5 font-mono text-xs tabular-nums'>
+            <span className='flex items-center gap-1.5 font-mono text-[0.625rem] tabular-nums'>
               {showAdditions && <span className='text-git-added'>+{change.additions}</span>}
               {showDeletions && <span className='text-git-deleted'>−{change.deletions}</span>}
             </span>
