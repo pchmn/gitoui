@@ -1,5 +1,4 @@
 import type { Commit, Ref, StatusEntry } from '@gitoui/contracts/git';
-import { IdentityAvatar } from '@gitoui/ui/identity-avatar';
 import { cn } from '@gitoui/ui/lib/utils';
 import { RefPill } from '@gitoui/ui/ref-pill';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -12,6 +11,7 @@ import { messages } from '#renderer/shared/messages/messages';
 import { matchError } from '#renderer/shared/utils/matchError';
 import { formatRelativeTime } from '#renderer/shared/utils/relativeTime';
 import { useCommits } from '../hooks/useCommits';
+import { AuthorAvatar } from './AuthorAvatar';
 import type { Frontier, LayoutRow, Transition } from './laneLayout';
 import { laneLayout } from './laneLayout';
 import { computeLaneRuns, runAt } from './laneRuns';
@@ -638,11 +638,7 @@ export function CommitGraph({ root }: { root: string }) {
               >
                 <span className='shrink-0'>{formatRelativeTime(commit.authoredAt)}</span>
                 •
-                <IdentityAvatar
-                  name={commit.author.name}
-                  seed={commit.author.email}
-                  shape='circle'
-                />
+                <AuthorAvatar name={commit.author.name} email={commit.author.email} />
                 {/* Hidden at rest — the avatar's identity color already answers "who" down the
                     column; the name is the on-demand layer, revealed to the avatar's right when
                     the row is hovered or selected, nudging the `1d • avatar` cluster left while

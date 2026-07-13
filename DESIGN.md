@@ -412,8 +412,12 @@ tinted line backgrounds with a `+` / `−` gutter (see Colors → Semantic). It 
 pane, not a colorful playground.
 
 ### Identity avatars
-- **Author avatar:** a small circle (≈`size-5`) with the author's initials in Micro text on a
-  deterministic identity-color fill, shown in the graph's `AUTHOR` column.
+- **Author avatar:** a small circle (≈`size-5`) in the graph's `AUTHOR` column. When the commit
+  *publicly* implies a GitHub account — a noreply author email carrying the username, or an
+  author name shaped exactly like a GitHub username — it shows the author's **real GitHub
+  profile photo**; a real email address never leaves the machine in any form (no Gravatar,
+  ADR 0014). Otherwise — and while the photo loads, or when it fails — it shows the author's
+  initials in Micro text on a deterministic identity-color fill.
 - **Repository avatar:** a `rounded-sm` tile with the repo's initial, same identity-color system,
   shown in the repository selector and the top bar.
 Both draw from the bounded identity palette (Colors → Identity); the color is functional (scanning
