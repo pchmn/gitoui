@@ -73,8 +73,9 @@
 }
 
 :root {
-  /* Source color, overridden at runtime by ThemeProvider via --primary-source */
-  --primary-source: #e8a87c;
+  /* Source color, overridden at runtime by ThemeProvider via --primary-source. Must match
+     DEFAULT_PRIMARY (palettes.ts) so the pre-mount fallback paints the real default tint. */
+  --primary-source: #8a6048;
 
   --background: oklch(from var(--primary-source) 0.99 calc(c * 0.15) h);
   --foreground: oklch(from var(--primary-source) 0.18 calc(c * 0.2) h);

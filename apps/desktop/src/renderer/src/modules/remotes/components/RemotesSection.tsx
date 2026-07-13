@@ -82,7 +82,9 @@ export function RemotesSection({
       {!isEmpty && (
         // px-2 inset mirrors BranchTreeView so a remote row (e.g. `origin`) aligns with a
         // top-level Branches folder (e.g. `chore/`) rather than the section header (issue #34).
-        <div className='flex flex-col px-2'>
+        // role="listbox" so the child `role="option"` rows (remotes + tracking branches) have a
+        // valid ARIA container, matching BranchesSection.
+        <div role='listbox' aria-label='Remotes' className='flex flex-col px-2'>
           {filteredRemotes.map((remote) => (
             <RemoteRow key={remote.name} remote={remote} filter={filter} viewMode={viewMode} />
           ))}

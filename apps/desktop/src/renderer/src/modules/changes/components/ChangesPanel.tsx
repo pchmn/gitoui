@@ -187,7 +187,7 @@ function ChangeGroup({
 
   return (
     <CollapsibleRoot open={open} onOpenChange={handleOpenChange}>
-      <div className='sticky top-0 z-10 flex h-8 shrink-0 items-center bg-muted pr-3 pl-3 text-xs font-bold text-muted-foreground'>
+      <div className='sticky top-0 z-10 flex h-8 shrink-0 items-center bg-muted pr-3 pl-3 text-xs font-semibold text-muted-foreground'>
         <CollapsibleTrigger className='flex h-full min-w-0 flex-1 items-center gap-1.5 text-left hover:text-foreground'>
           {open ? (
             <CaretDownIcon className='size-3 shrink-0' aria-hidden='true' />

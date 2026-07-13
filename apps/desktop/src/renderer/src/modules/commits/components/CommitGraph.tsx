@@ -5,7 +5,10 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
 import { CHANGE_ICON, CHANGE_LETTER_TONE } from '#renderer/modules/changes/components/changeGlyph';
 import { useStatus } from '#renderer/modules/changes/hooks/useStatus';
-import { useCommitSelection } from '#renderer/modules/commits/CommitSelectionContext';
+import {
+  type CommitSelection,
+  useCommitSelection,
+} from '#renderer/modules/commits/CommitSelectionContext';
 import type { GitError } from '#renderer/shared/git/errors';
 import { messages } from '#renderer/shared/messages/messages';
 import { matchError } from '#renderer/shared/utils/matchError';
@@ -362,6 +365,73 @@ export function CommitGraph({ root }: { root: string }) {
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [selection, select]);
 
+  // Arrow-key navigation: ↑/↓ move the selection to the previous/next Commit instead of scrolling
+  // the viewport. Driven off `selection` (app state), not DOM focus, so it survives rows
+  // virtualizing in and out. The WIP row sits at the top of the sequence and both ends clamp — no
+  // wrap. The handler lives on the scroll container (below) so it fires whether focus is on the WIP
+  // button or a Commit row, and only when the graph itself holds focus (arrows elsewhere untouched).
+  function selectAndReveal(next: CommitSelection) {
+    select(next);
+    if (next.kind === 'workingTree') {
+      virtualizer.scrollToOffset(0);
+    } else {
+      const idx = (commits ?? NO_COMMITS).findIndex((c) => c.sha === next.sha);
+      if (idx >= 0) virtualizer.scrollToIndex(idx);
+    }
+    // The target may have only just mounted after scrolling — pull focus on the next frame so the
+    // focus ring follows the selection and the next key still lands on the graph. `preventScroll`
+    // leaves scrolling to the virtualizer above.
+    requestAnimationFrame(() => {
+      const el =
+        next.kind === 'workingTree'
+          ? scrollRef.current?.querySelector('[data-slot="wip-row"]')
+          : scrollRef.current?.querySelector(`[data-commit-sha="${next.sha}"]`);
+      if (el instanceof HTMLElement) el.focus({ preventScroll: true });
+    });
+  }
+
+  function moveSelection(direction: 1 | -1) {
+    const list = commits ?? NO_COMMITS;
+    const firstSha = list[0]?.sha;
+    if (firstSha === undefined) return;
+    const first: CommitSelection = { kind: 'commit', sha: firstSha };
+    // The top of the sequence: the WIP row when the tree is dirty, else the first Commit.
+    const top: CommitSelection = hasWip ? { kind: 'workingTree' } : first;
+
+    if (selection === null) return selectAndReveal(top);
+
+    if (direction === -1) {
+      if (selection.kind === 'workingTree') return; // already at the top — clamp
+      const i = list.findIndex((c) => c.sha === selection.sha);
+      if (i <= 0) return selectAndReveal(top); // from the first Commit → WIP (or clamp on a clean tree)
+      const prev = list[i - 1];
+      if (prev) return selectAndReveal({ kind: 'commit', sha: prev.sha });
+      return;
+    }
+
+    // direction === 1 (down)
+    if (selection.kind === 'workingTree') return selectAndReveal(first);
+    const i = list.findIndex((c) => c.sha === selection.sha);
+    if (i < 0) return selectAndReveal(first);
+    if (i >= list.length - 1) return; // last loaded Commit — clamp
+    const nextCommit = list[i + 1];
+    if (nextCommit) return selectAndReveal({ kind: 'commit', sha: nextCommit.sha });
+  }
+
+  // Attached to the role-bearing surfaces (the listbox and the WIP button — not the static scroll
+  // container, which a11y rules rightly forbid interaction handlers on): ↑/↓ move the selection,
+  // preventDefault stops the native scroll. Structural param type so one handler fits both a div's
+  // and a button's `onKeyDown`.
+  const onArrowKeyDown = (event: { key: string; preventDefault: () => void }) => {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      moveSelection(1);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      moveSelection(-1);
+    }
+  };
+
   // Loading state — show skeleton rows, no spinner. Only without data: growing the loaded window
   // recompiles the live query, and the already-loaded rows must keep showing through it.
   if (isLoading && (commits === undefined || commits.length === 0)) {
@@ -421,12 +491,18 @@ export function CommitGraph({ root }: { root: string }) {
           summary={wip}
           selected={selection?.kind === 'workingTree'}
           onSelect={() => select({ kind: 'workingTree' })}
+          onKeyDown={onArrowKeyDown}
         />
       )}
-      <ul
+      {/* role="listbox" (on a div, not <ul>, per Biome's noNoninteractiveElementToInteractiveRole —
+          same reason BranchesSection uses a div): the commit rows are selectable options, so they
+          need list semantics + a keyboard path, not a static list. */}
+      <div
+        role='listbox'
         className='relative w-full'
         style={{ height: virtualizer.getTotalSize() }}
         aria-label='Commits'
+        onKeyDown={onArrowKeyDown}
       >
         {virtualItems.map((virtualRow) => {
           const style = {
@@ -445,7 +521,7 @@ export function CommitGraph({ root }: { root: string }) {
           // indicator or the quiet end-of-history terminus — no fanfare either way.
           if (virtualRow.index >= rowCount) {
             return (
-              <li
+              <div
                 key='footer'
                 style={style}
                 className='flex items-center justify-center text-xs text-muted-foreground'
@@ -454,7 +530,7 @@ export function CommitGraph({ root }: { root: string }) {
                 {isFetchingNextPage
                   ? messages.commitGraph.loadingMore
                   : messages.commitGraph.endOfHistory}
-              </li>
+              </div>
             );
           }
 
@@ -467,7 +543,9 @@ export function CommitGraph({ root }: { root: string }) {
           const isRunMember = hoveredCommitRows?.has(virtualRow.index) ?? false;
           // While a run is hovered, only its own Commits stay fully legible — the other rows'
           // subject + author recede a touch so the branch reads as the foreground set.
-          const isContentDimmed = hover !== null && !isRunMember;
+          // Selection outranks hover (DESIGN §Commit Graph): the selected row stays fully legible
+          // even while another run is hover-highlighted — it never recedes into the dimmed set.
+          const isContentDimmed = hover !== null && !isRunMember && !isRowSelected;
           const highlightCol =
             hoveredRun !== null &&
             virtualRow.index >= hoveredRun.fromRow &&
@@ -519,8 +597,12 @@ export function CommitGraph({ root }: { root: string }) {
           const ghostLabel = commit.refs.length === 0 ? (rowRun?.label ?? null) : null;
 
           return (
-            <li
+            <div
               key={commit.sha}
+              role='option'
+              tabIndex={0}
+              aria-selected={isRowSelected}
+              data-commit-sha={sha}
               // DESIGN §Commit Graph: every row fill is the row's own lane color at a step of
               // the tint ladder — rest, run member, hover, selected (strongest, persistent) —
               // so a selected row reads as part of a highlighted run rather than breaking out
@@ -536,7 +618,7 @@ export function CommitGraph({ root }: { root: string }) {
                 } as CSSProperties
               }
               className={cn(
-                'group relative flex cursor-default items-center gap-3 border-b border-border/50 px-3 text-xs',
+                'group relative flex cursor-default items-center gap-3 border-b border-border/50 px-3 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset',
                 isRowSelected
                   ? 'bg-(--row-tint-selected)'
                   : 'bg-(--row-tint) hover:bg-(--row-tint-hover)',
@@ -648,10 +730,10 @@ export function CommitGraph({ root }: { root: string }) {
                   {commit.author.name}
                 </span>
               </span>
-            </li>
+            </div>
           );
         })}
-      </ul>
+      </div>
       {lanesOverflow && (
         <div
           ref={lanesScrollRef}
@@ -873,6 +955,7 @@ function WipRow({
   summary,
   selected,
   onSelect,
+  onKeyDown,
 }: {
   col: number;
   lanesWidth: number;
@@ -886,6 +969,8 @@ function WipRow({
   };
   selected: boolean;
   onSelect: () => void;
+  /** ↑/↓ arrow navigation shared with the Commit listbox (the WIP row is the top of the sequence). */
+  onKeyDown: (event: { key: string; preventDefault: () => void }) => void;
 }) {
   const { additions, deletions, modified, added, deleted } = summary;
   const half = ROW_HEIGHT_PX / 2;
@@ -909,13 +994,20 @@ function WipRow({
         } as CSSProperties
       }
       className={cn(
-        'group relative flex h-8 w-full cursor-default items-center gap-3 border-b border-border/50 px-3 text-left text-xs',
+        'group relative flex h-8 w-full cursor-default items-center gap-3 border-b border-border/50 px-3 text-left text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset',
         selected ? 'bg-(--row-tint-selected)' : 'bg-(--row-tint) hover:bg-(--row-tint-hover)',
       )}
       data-slot='wip-row'
       data-selected={selected}
       aria-label={messages.commitGraph.wipSubject}
-      onClick={onSelect}
+      // macOS doesn't focus a <button> on click (unlike the Commit rows' focusable <div>s), so pull
+      // focus explicitly — otherwise the row's own onKeyDown never fires and ↓ scrolls instead of
+      // stepping to the first Commit. preventScroll leaves any scrolling to the arrow handler.
+      onClick={(e) => {
+        onSelect();
+        e.currentTarget.focus({ preventScroll: true });
+      }}
+      onKeyDown={onKeyDown}
     >
       {/* Empty REFS zone — the WIP row wears no pill (the dotted node + the persistent stronger
           tint carry it; "WIP" is dev jargon the subject already says plainly). Its fixed width keeps

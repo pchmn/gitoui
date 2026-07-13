@@ -54,7 +54,11 @@ export function BranchSelector() {
   const isDetached = head._tag === 'Detached';
   const currentBranchName = head._tag === 'OnBranch' ? head.branch : null;
 
-  const triggerLabel = isDetached ? `detached @ ${head.sha}` : (currentBranchName ?? '');
+  // Match the rail banner's abbreviated SHA (and CONTEXT.md's `<sha>`) — the full 40-char id would
+  // only truncate inside the trigger's max width.
+  const triggerLabel = isDetached
+    ? messages.branchesSection.detached(head.sha.slice(0, 7))
+    : (currentBranchName ?? '');
   const currentBranch = branches.find((b) => b.isCurrent) ?? null;
 
   function handleOpenChange(next: boolean) {
@@ -107,6 +111,7 @@ export function BranchSelector() {
       onOpenChange={handleOpenChange}
     >
       <ComboboxTrigger
+        title={isDetached ? messages.branchesSection.detachedHint : undefined}
         className={cn(
           'no-drag flex h-8 max-w-48 items-center gap-2 rounded-md px-2 text-xs font-medium transition-colors outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/30 aria-expanded:bg-muted',
           isDetached ? 'text-muted-foreground' : 'text-foreground',

@@ -31,11 +31,13 @@ export function StatusBar() {
               <span className='truncate'>{status.branch}</span>
             </span>
             {(status.ahead > 0 || status.behind > 0) && (
-              <span className='flex items-center gap-1.5 tabular-nums'>
+              <span className='flex items-center gap-1.5 font-mono tabular-nums'>
                 {status.ahead > 0 && <span>↑{status.ahead}</span>}
                 {status.behind > 0 && <span>↓{status.behind}</span>}
               </span>
             )}
+            {/* "N changed" is a numeral fused to a word — the count stays DM Sans per the Tabular
+                Numeral Rule's carve-out (mono never sets a word); only the bare counts above go mono. */}
             <span className='tabular-nums'>
               {messages.statusBar.changedCount(status.entries.length)}
             </span>

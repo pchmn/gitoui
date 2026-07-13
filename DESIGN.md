@@ -239,16 +239,30 @@ from a competing typeface.
   prose at 65–75ch; data rows and the graph run denser.
 - **Label** (500, 0.75rem / `text-xs`, lh ~1.6): the workhorse — buttons, field labels, list rows,
   the repository rail, branch names. Most of the UI lives here.
-- **Micro** (500, 0.625rem / 10px, `+0.01em`): badges, `+N / −N` diff stats, `xs` buttons, ref
-  pills. The smallest readable step; never smaller.
-- **Mono** (DM Mono, 400, 0.8125rem / 13px, lh 1.6): code, diffs, and raw file content only —
-  never UI labels. Line numbers sit in Muted Ink; the code itself in Ink.
+- **Micro** (500, 0.625rem / 10px, `+0.01em`): badge and ref-pill text, `xs` buttons, and the
+  smallest UI labels. The smallest readable step; never smaller. (The *numeric* badges — count
+  chips, `+N / −N` stats — sit at this size but are set in DM Mono for tabular alignment; see the
+  Mono line and the Tabular Numeral Rule.)
+- **Mono** (DM Mono, 400, 0.8125rem / 13px, lh 1.6): code, diffs, and raw file content — line
+  numbers in Muted Ink, the code itself in Ink. Also the app's **tabular numerals**: count chips,
+  `+N / −N` diff stats, the 72-char commit-subject countdown, and commit SHAs, rendered at Micro
+  size (0.625rem) with `tabular-nums` so dense, changing figures stay aligned. Never sets a word or
+  label — numerals and code only (see the Tabular Numeral Rule).
 
 ### Named Rules
 **The Two-Family Rule.** DM Sans carries the entire interface — headings, body, labels, data, and
-buttons. DM Mono is the *only* sanctioned second family, and only for rendering real code, diffs,
-and file content (the documented exception this rule always reserved). No third family, no display
-serif, no decorative face: if text isn't code, it's DM Sans.
+buttons. DM Mono is the *only* sanctioned second family, reserved for two things: rendering real
+code, diffs, and file content; and the app's **tabular numerals** (see the Tabular Numeral Rule).
+No third family, no display serif, no decorative face: if text isn't code or a numeral, it's DM
+Sans — and DM Mono never sets a word or label.
+
+**The Tabular Numeral Rule.** Every **bare numeral** in dense chrome is DM Mono with `tabular-nums`,
+at Micro size: count chips on section headers, `+N / −N` diff stats, the 72-char commit-subject
+countdown, commit SHAs, and inline counts like the graph's and rail's ahead/behind (`↑2 ↓1`) and the
+status bar's counts. A scoped extension of the Two-Family Rule, not a breach: mono is spent for its
+fixed-width figures, so columns align and digits don't jitter as they change. The one carve-out is a
+numeral fused to a word in a running phrase (e.g. the status bar's "N changed") — that stays DM Sans,
+because mono never sets a word. Bare numerals go mono; numerals inside prose don't.
 
 **The Fixed Scale Rule.** Sizes are a fixed rem scale, never `clamp()`. A tool is viewed at a
 consistent DPI; fluid headings that shrink inside a panel look broken, not responsive.
@@ -436,6 +450,11 @@ beside the subject rather than at the row's far edge (the row's one piece of con
 unit; the right edge stays quiet), with no timestamp (it is always "now").
 - **Legibility is non-negotiable.** Lanes must stay distinguishable by **position + lightness +
   ref label**, so the graph reads for color-blind users and survives a low-chroma source.
+- **Keyboard-navigable, not just clickable.** The rows are a `listbox` of `option`s (on divs, per
+  the interactive-role rule): each is focusable, and **↑ / ↓ move the selection** to the previous /
+  next Commit (scrolling it into view) rather than scrolling the viewport. The WIP row sits at the
+  top of that sequence; both ends **clamp** (no wrap). Selection, not pointer focus, drives it, so it
+  survives rows virtualizing in and out — the protagonist surface is fully operable without a mouse.
 - Because lane chroma follows the source, enforce a **minimum lane chroma and clear lightness
   steps** so lanes never collapse into one another when the user picks a desaturated tint.
 - **The lanes zone caps at a max width** (12 columns) and pans horizontally behind one shared,

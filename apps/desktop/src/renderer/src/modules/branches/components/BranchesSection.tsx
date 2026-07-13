@@ -73,13 +73,16 @@ export function BranchesSection({
 
   return (
     <>
-      {/* Detached HEAD banner — no branch is current here (all isCurrent are false). */}
+      {/* Detached HEAD banner — no branch is current here (all isCurrent are false). The canonical
+          `detached @ <sha>` line leads; a quiet hint below explains the state for the CLI-wary. */}
       {isDetached && (
-        <div
-          className='mx-2 mb-1 rounded-sm bg-muted px-2 py-1 text-xs text-muted-foreground'
-          aria-live='polite'
-        >
-          {messages.branchesSection.detached(head.sha.slice(0, 7))}
+        <div className='mx-2 mb-1 rounded-sm bg-muted px-2 py-1.5 text-xs' aria-live='polite'>
+          <span className='font-medium text-foreground'>
+            {messages.branchesSection.detached(head.sha.slice(0, 7))}
+          </span>
+          <span className='mt-0.5 block text-[0.6875rem] leading-snug text-muted-foreground'>
+            {messages.branchesSection.detachedHint}
+          </span>
         </div>
       )}
 

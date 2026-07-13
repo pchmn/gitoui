@@ -47,7 +47,16 @@ export const messages = {
     repoNotFound: (path: string) => `Repository not found: ${path}`,
     emptyYet: 'No branches yet.',
     emptyFiltered: 'No branches match filter.',
+    // Canonical read-only representation of Detached HEAD (CONTEXT.md): keep the `detached @ <sha>`
+    // wording exactly. `detachedHint` is the plain-language explanation shown alongside it (rail
+    // banner) and as the selector trigger's tooltip, for developers who don't live in the git CLI.
     detached: (sha: string) => `detached @ ${sha}`,
+    detachedHint:
+      "HEAD is on a commit, not a branch. New commits won't belong to a branch until you create or switch to one.",
+    // The hover/focus-revealed Switch action on a non-current branch row — the icon button's
+    // screen-reader name + tooltip, naming which branch it switches to. Switch ≠ Select (see
+    // BranchRow).
+    switchAction: (name: string) => `Switch to ${name}`,
   },
   remotesSection: {
     failedToLoad: 'Failed to load remotes.',
@@ -118,7 +127,7 @@ export const messages = {
   branchSelector: {
     filterPlaceholder: 'Filter branches…',
     empty: 'No branches found.',
-    localGroup: 'LOCAL',
+    localGroup: 'Local',
     // ONE key — used in the placeholder of the inline name input and in the footer button label.
     newBranchFrom: (branch: string) => `New branch from ${branch}…`,
   },
@@ -132,7 +141,9 @@ export const messages = {
       // Fallback when a git command fails but git gave no usable message (GitCommandError carries
       // git's own stderr — that verbatim line is preferred over this generic phrase).
       gitCommandFailed: 'Git could not complete the operation.',
-      unexpected: 'An unexpected error occurred.',
+      // Last-resort fallback for Defects (bugs) and non-tagged throws. Human, and points at the one
+      // next step that helps a transient failure — retrying — rather than a dead-end statement.
+      unexpected: 'Something went wrong. Please try again.',
     },
     switchBranch: { title: 'Could not switch branch' },
     createBranch: { title: 'Could not create branch' },
