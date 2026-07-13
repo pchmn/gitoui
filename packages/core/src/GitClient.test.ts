@@ -6,6 +6,7 @@ import { it } from '@effect/vitest';
 import { Effect } from 'effect';
 import { afterAll, beforeAll, describe, expect } from 'vitest';
 import {
+  extractCommitFailureMessage,
   extractGitMessage,
   GitClient,
   isUnbornHeadError,
@@ -1320,6 +1321,88 @@ describe('GitClient staging', () => {
   );
 });
 
+// --- GitClient.commit integration tests (issue #63) ---
+
+describe('GitClient.commit', () => {
+  let base: string;
+
+  const g = (cwd: string, ...args: string[]) =>
+    execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+
+  // A fresh repo per test, seeded with two already-committed files so a test can leave one of them
+  // Unstaged (modified, not `git add`ed) while staging the other — mirrors the acceptance
+  // criterion's "2 staged, 1 unstaged" scenario.
+  const makeRepo = (): string => {
+    const repo = mkdtempSync(join(base, 'repo-'));
+    execFileSync('git', ['init', '-q', '-b', 'main', repo]);
+    g(repo, 'config', 'user.email', 'test@test.com');
+    g(repo, 'config', 'user.name', 'Test');
+    writeFileSync(join(repo, 'committed.txt'), 'v1');
+    writeFileSync(join(repo, 'other.txt'), 'v1');
+    g(repo, 'add', 'committed.txt', 'other.txt');
+    g(repo, 'commit', '-m', 'init');
+    return repo;
+  };
+
+  beforeAll(() => {
+    base = realpathSync(mkdtempSync(join(tmpdir(), 'gitoui-commit-')));
+  });
+
+  afterAll(() => rmSync(base, { recursive: true, force: true }));
+
+  it.effect(
+    'commits exactly the Staged set, message verbatim, returns the new SHA — the unstaged Change survives',
+    () =>
+      Effect.gen(function* () {
+        const repo = makeRepo();
+        // Staged: a modified tracked file + a new file.
+        writeFileSync(join(repo, 'committed.txt'), 'v2');
+        writeFileSync(join(repo, 'new.txt'), 'new');
+        g(repo, 'add', 'committed.txt', 'new.txt');
+        // Unstaged: a modification to the other tracked file — must survive the commit untouched.
+        writeFileSync(join(repo, 'other.txt'), 'v2');
+
+        const client = yield* GitClient;
+        const before = g(repo, 'rev-parse', 'HEAD');
+        const { sha } = yield* client.commit(repo, 'Add staged file\n\nMulti-line body.');
+
+        expect(sha).not.toBe(before);
+        expect(sha).toBe(g(repo, 'rev-parse', 'HEAD'));
+
+        // Exactly the 2 staged files landed in the Commit — not `other.txt`.
+        const changed = g(repo, 'show', '--name-only', '--format=', 'HEAD').split('\n').sort();
+        expect(changed).toEqual(['committed.txt', 'new.txt']);
+
+        // The unstaged modification to `other.txt` survives, untouched. Untrimmed (not `g`) —
+        // the leading space of the `<XY>` porcelain axes matters and `g`'s whole-string `.trim()`
+        // would eat it when this is the only status line.
+        const rawStatus = execFileSync('git', ['status', '--porcelain'], {
+          cwd: repo,
+          encoding: 'utf8',
+        });
+        expect(rawStatus).toContain(' M other.txt');
+
+        // Multi-line message lands verbatim: first line is the subject, rest is the body.
+        expect(g(repo, 'log', '-1', '--format=%s')).toBe('Add staged file');
+        expect(g(repo, 'log', '-1', '--format=%b')).toBe('Multi-line body.');
+      }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect(
+    "fails with GitCommandError (git's own 'nothing to commit' message) when the Staged set is empty",
+    () =>
+      Effect.gen(function* () {
+        const repo = makeRepo();
+        const client = yield* GitClient;
+        const error = yield* Effect.flip(client.commit(repo, 'Nothing to commit'));
+        expect(error._tag).toBe('GitCommandError');
+        if (error._tag === 'GitCommandError') {
+          expect(error.message.toLowerCase()).toContain('nothing to commit');
+        }
+      }).pipe(Effect.provide(GitClient.Default)),
+  );
+});
+
 // --- extractGitMessage unit tests (pure) ---
 
 describe('extractGitMessage', () => {
@@ -1341,5 +1424,34 @@ describe('extractGitMessage', () => {
   it('falls back when there is nothing usable', () => {
     expect(extractGitMessage('')).toBe('git command failed');
     expect(extractGitMessage(null)).toBe('null');
+  });
+});
+
+// --- extractCommitFailureMessage unit tests (pure) ---
+
+describe('extractCommitFailureMessage', () => {
+  it('takes the last non-empty line, not the first (unlike extractGitMessage)', () => {
+    const stdout = 'On branch main\nnothing to commit, working tree clean\n';
+    expect(extractCommitFailureMessage(stdout)).toBe('nothing to commit, working tree clean');
+  });
+
+  it("picks the reason out of git's multi-line 'changes not staged' refusal", () => {
+    const stdout = [
+      'On branch main',
+      'Changes not staged for commit:',
+      '  (use "git add <file>..." to update what will be committed)',
+      '  (use "git restore <file>..." to discard changes in working directory)',
+      '\tmodified:   a.txt',
+      '',
+      'no changes added to commit (use "git add" and/or "git commit -a")',
+    ].join('\n');
+    expect(extractCommitFailureMessage(stdout)).toBe(
+      'no changes added to commit (use "git add" and/or "git commit -a")',
+    );
+  });
+
+  it('falls back when there is nothing usable', () => {
+    expect(extractCommitFailureMessage('')).toBe('nothing to commit');
+    expect(extractCommitFailureMessage('\n\n')).toBe('nothing to commit');
   });
 });

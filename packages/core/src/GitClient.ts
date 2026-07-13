@@ -484,6 +484,25 @@ function withStats(
 }
 
 /**
+ * Extract the human-facing reason from a failed `git commit`'s STDOUT (issue #63). simple-git's
+ * `raw()` does NOT reject when `git commit` exits non-zero for its own "nothing to commit"-style
+ * refusal — unlike `add`/`restore`, there's no dedicated error path, so the resolved value IS
+ * that stdout text (see the `commit` method, which detects the failure itself via HEAD not
+ * moving and hands this that text). git always leads with `On branch <name>` — the actual reason
+ * (`nothing to commit, working tree clean` / `no changes added to commit (…)`) sits on the LAST
+ * non-empty line, unlike a real stderr `fatal:` failure where it's the FIRST (`extractGitMessage`).
+ *
+ * Pure function — no IO — so it can be unit-tested against pinned output without spawning git.
+ */
+export function extractCommitFailureMessage(stdout: string): string {
+  const lines = stdout
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  return lines[lines.length - 1] ?? 'nothing to commit';
+}
+
+/**
  * The git engine, as an Effect service (DI via Layer). Methods return Effects with typed errors.
  */
 export class GitClient extends Effect.Service<GitClient>()('@gitoui/core/GitClient', {
@@ -693,6 +712,38 @@ export class GitClient extends Effect.Service<GitClient>()('@gitoui/core/GitClie
           if (!isUnbornHeadError(cause)) throw cause;
           await git.raw(['rm', '--cached', '-r', '-q', '--', '.']);
         }
+      }).pipe(
+        Effect.catchTag(
+          'GitProcessError',
+          (e) => new GitCommandError({ message: extractGitMessage(e.cause) }),
+        ),
+      ),
+
+    /**
+     * Commit exactly the Staged set (issue #63). Plain `git commit -m <message>` — NEVER `-a`, so
+     * only what's already in the index lands in the Commit; the message crosses verbatim (multi-line
+     * allowed, no processing). Returns the new Commit's SHA via a follow-up `rev-parse HEAD`.
+     *
+     * Seam: simple-git's `raw()` does NOT reject when `git commit` exits non-zero for its own
+     * "nothing to commit" refusal (verified against simple-git's actual behavior — no dedicated
+     * error path for that task, unlike `add`/`restore`) — the promise resolves with git's stdout
+     * text instead. So the failure is detected explicitly: HEAD not moving after the call IS the
+     * failure (this also covers the unborn-HEAD case, where `before` is null and any successful
+     * first commit necessarily differs from it), and `extractCommitFailureMessage` turns that
+     * stdout into a `GitCommandError` — this is exactly the race where the Staged set emptied
+     * between render and click. Any OTHER commit failure (a repo that's gone, …) still throws for
+     * real and is caught by the `GitProcessError` tag below, same taxonomy as the staging methods.
+     */
+    commit: (repoPath: string, message: string): Effect.Effect<{ sha: string }, GitCommandError> =>
+      withGit(repoPath, async (git) => {
+        const before = await git
+          .revparse(['HEAD'])
+          .then((sha) => sha.trim())
+          .catch(() => null);
+        const output = await git.raw(['commit', '-m', message]);
+        const after = (await git.revparse(['HEAD'])).trim();
+        if (after === before) throw new Error(extractCommitFailureMessage(output));
+        return { sha: after };
       }).pipe(
         Effect.catchTag(
           'GitProcessError',

@@ -20,6 +20,8 @@ vi.mock('@gitoui/ui/toast', () => ({ toast: { add: mockToastAdd } }));
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  // Group open/closed state persists per group — clear it so a collapse in one test can't leak.
+  localStorage.clear();
 });
 
 vi.stubGlobal('desktop', { platform: 'linux' });
@@ -155,11 +157,11 @@ describe('ChangesPanel groups', () => {
     ];
     render(<Wrapper statusMock={() => Promise.resolve(makeStatus({ entries }))} />);
 
-    expect(await screen.findByText('STAGED')).toBeTruthy();
-    expect(screen.getByText('UNSTAGED')).toBeTruthy();
+    expect(await screen.findByText('Staged')).toBeTruthy();
+    expect(screen.getByText('Unstaged')).toBeTruthy();
 
-    const stagedGroup = screen.getByRole('listbox', { name: 'STAGED' });
-    const unstagedGroup = screen.getByRole('listbox', { name: 'UNSTAGED' });
+    const stagedGroup = screen.getByRole('listbox', { name: 'Staged' });
+    const unstagedGroup = screen.getByRole('listbox', { name: 'Unstaged' });
     expect(stagedGroup.querySelectorAll('[role="option"]')).toHaveLength(2);
     expect(unstagedGroup.querySelectorAll('[role="option"]')).toHaveLength(2);
 
@@ -184,8 +186,8 @@ describe('ChangesPanel groups', () => {
     const rows = await screen.findAllByText('a.txt');
     expect(rows).toHaveLength(2);
 
-    const stagedGroup = screen.getByRole('listbox', { name: 'STAGED' });
-    const unstagedGroup = screen.getByRole('listbox', { name: 'UNSTAGED' });
+    const stagedGroup = screen.getByRole('listbox', { name: 'Staged' });
+    const unstagedGroup = screen.getByRole('listbox', { name: 'Unstaged' });
     expect(stagedGroup.textContent).toMatch(/\+3/);
     expect(stagedGroup.textContent).toMatch(/−1/);
     expect(unstagedGroup.textContent).toMatch(/\+5/);
@@ -219,6 +221,39 @@ describe('ChangesPanel groups', () => {
       ?.querySelector('[data-kind]');
     expect(removedGlyph?.getAttribute('data-kind')).toBe('deleted');
     expect(removedGlyph?.className).toContain('text-git-deleted');
+  });
+
+  it('always renders both groups — an empty one shows a hint and disables its bulk action', async () => {
+    // Only staged entries: the Unstaged group must still render, with its hint and Stage all disabled.
+    const entries: StatusEntry[] = [{ path: 'a.txt', staged: { kind: 'modified' } }];
+    render(<Wrapper statusMock={() => Promise.resolve(makeStatus({ entries }))} />);
+
+    expect(await screen.findByText('Unstaged')).toBeTruthy();
+    expect(screen.getByText('No unstaged changes.')).toBeTruthy();
+    // The empty group renders its hint instead of a listbox.
+    expect(screen.queryByRole('listbox', { name: 'Unstaged' })).toBeNull();
+    const stageAllButton = screen.getByRole('button', { name: 'Stage all' });
+    expect((stageAllButton as HTMLButtonElement).disabled).toBe(true);
+    const unstageAllButton = screen.getByRole('button', { name: 'Unstage all' });
+    expect((unstageAllButton as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('collapses a group from its header and persists the closed state', async () => {
+    const entries: StatusEntry[] = [{ path: 'a.txt', unstaged: { kind: 'modified' } }];
+    render(<Wrapper statusMock={() => Promise.resolve(makeStatus({ entries }))} />);
+
+    // The header trigger's accessible name is "Unstaged <count>" (heading + count chip).
+    const trigger = await screen.findByRole('button', { name: /^Unstaged/, expanded: true });
+    await act(async () => {
+      trigger.click();
+    });
+
+    // The list folds away; the header (with its count) stays.
+    expect(screen.queryByRole('listbox', { name: 'Unstaged' })).toBeNull();
+    expect(screen.getByRole('button', { name: /^Unstaged/ }).getAttribute('aria-expanded')).toBe(
+      'false',
+    );
+    expect(localStorage.getItem('gitoui:changes-group-unstaged-open')).toBe('false');
   });
 
   it('omits stats for untracked and binary entries', async () => {

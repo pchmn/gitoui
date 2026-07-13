@@ -380,10 +380,29 @@ The right panel is one tabbed surface with two modes:
   icon button when Unstaged, `−` when Staged — absolutely placed with a gradient fade so they never
   shift the filename. (There is no persistent checkbox; the hover `+` / `−` is the per-row
   affordance.) A **leading file-type icon** is intentionally omitted for now — it returns with
-  `@pierre/trees` (which also backs the Tree tab). Group headers offer *Stage all* / *Unstage all*;
-  staging is optimistic — the row moves groups instantly and the real `git status` reconciles a
-  moment later. Below the lists sit the commit-message field and the primary **Commit N files**
-  button. No card per row — tone and Hairlines separate them.
+  `@pierre/trees` (which also backs the Tree tab). **Group headers share the rail's full
+  section-header grammar** (RailSection): chevron + leading duotone icon + sentence-case label +
+  mono count chip — a dashed circle for *Unstaged* (echoing the graph's dashed WIP node: in flux)
+  and a check circle for *Staged* (settled, about to be committed) — never a bare all-caps eyebrow.
+  Like the rail's sections, **a group collapses from its header** (open state persisted per group),
+  so a long Unstaged list folds away to reach Staged. Each header is a **sticky one-step
+  Muted-Surface band** (opaque, borderless — the tonal step alone marks the seam) that pins while
+  its list scrolls, and carries the right-aligned *Stage all* / *Unstage all* text action (the
+  count chip drops to Canvas so it holds on the band). **Both groups always render on a dirty
+  tree**: an empty one shows a quiet Muted-Ink hint ("No unstaged changes.") with its bulk action
+  disabled, so the buckets keep a stable home while files move between them (a fully clean Working
+  tree still shows the single quiet empty state). Staging is optimistic — the row moves
+  groups instantly and the real `git status` reconciles a moment later. Below the lists sits the
+  **commit composer** (GitKraken-style): one quiet field group holding a single-line **Commit
+  message** (the subject — Body size, regular weight, it's what the graph will show) and an
+  optional **Description** textarea one type step smaller (Label size), the subject leading by
+  size alone; they join as git's native subject /
+  blank line / body shape and cross the IPC boundary as one string. The group owns the chrome
+  (ghost fields inside; resting `input/10` fill, focus hairline + ring via `focus-within`). A Micro
+  mono **72-char countdown** appears at the subject's end once you type — Muted Ink,
+  destructive-tinted when overspent, guidance never a hard stop. `Enter` in the subject walks into
+  the description; `Cmd+Enter` commits from either field. The primary **Commit N files** button
+  sits beneath. No card per row — tone and Hairlines separate them.
 - **Tree:** a collapsible file browser with a filter field, directory rows that disclose, and file
   rows at Label size with a leading file / status dot. Selected row → Accent Surface. Dense, never boxed.
 

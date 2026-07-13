@@ -75,8 +75,13 @@ export const messages = {
     failedToLoad: 'Failed to load status.',
     repoNotFound: (path: string) => `Repository not found: ${path}`,
     clean: 'Clean working tree',
-    stagedHeading: 'STAGED',
-    unstagedHeading: 'UNSTAGED',
+    // Sentence case + a leading icon — the group headers share the rail's section-header grammar
+    // (RailSection), not an all-caps eyebrow of their own.
+    stagedHeading: 'Staged',
+    unstagedHeading: 'Unstaged',
+    // Quiet Muted-Ink hint inside an empty group — both groups always render on a dirty tree.
+    emptyStaged: 'No staged changes.',
+    emptyUnstaged: 'No unstaged changes.',
     retry: 'Retry',
     // Group-header bulk actions (DESIGN.md mockup): Unstage all sits on the STAGED group, Stage all
     // on the UNSTAGED group.
@@ -85,6 +90,13 @@ export const messages = {
     // Per-row checkbox labels — the accessible name for the stage/unstage toggle.
     stageRowAria: (name: string) => `Stage ${name}`,
     unstageRowAria: (name: string) => `Unstage ${name}`,
+    // The commit composer (issue #63): a GitKraken-style summary + description field group and the
+    // primary "Commit N files" button. The two fields join as git's native message shape (subject,
+    // blank line, body). `n` stays a raw number (never pre-formatted) so the label pluralizes here
+    // (1 file / N files).
+    summaryPlaceholder: 'Commit message',
+    descriptionPlaceholder: 'Description',
+    commitButton: (n: number) => `Commit ${n} ${n === 1 ? 'file' : 'files'}`,
   },
   commitGraph: {
     failedToLoad: 'Failed to load commits.',
@@ -128,6 +140,7 @@ export const messages = {
     unstageFile: { title: 'Could not unstage file' },
     stageAll: { title: 'Could not stage changes' },
     unstageAll: { title: 'Could not unstage changes' },
+    commit: { title: 'Could not commit' },
     activateRepository: {
       title: 'Could not open repository',
       // Override of byTag.repoNotFound — context-specific wording for this action.

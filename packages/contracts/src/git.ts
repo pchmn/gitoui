@@ -118,6 +118,17 @@ export const CreateBranchInput = Schema.Struct({
 });
 export type CreateBranchInput = typeof CreateBranchInput.Type;
 
+/** Input for `commit` — the message is passed verbatim (multi-line allowed, no processing). */
+export const CommitInput = Schema.Struct({
+  repoPath: Schema.String,
+  message: Schema.String,
+});
+export type CommitInput = typeof CommitInput.Type;
+
+/** The result of `commit`: the new Commit's SHA. */
+export const CommitResult = Schema.Struct({ sha: Schema.String });
+export type CommitResult = typeof CommitResult.Type;
+
 /**
  * Input for a single-file staging op — `stageFile` / `unstageFile` both take one `path` (relative
  * to the Repository root) within a Repository. Whole-tree ops (`stageAll` / `unstageAll`) reuse
@@ -325,6 +336,19 @@ export const stageAll = defineMethod({
 export const unstageAll = defineMethod({
   payload: RepoInput,
   success: Schema.Void,
+  error: GitCommandError,
+});
+
+/**
+ * Commit exactly the Staged set (`git commit -m <message>` — plain semantics, never `-a`). The
+ * message crosses verbatim (multi-line allowed; first line is the summary by git convention — no
+ * processing here). The race where the Staged set emptied between render and click surfaces as a
+ * `GitCommandError` carrying git's own "nothing to commit" message — same taxonomy as the other
+ * mutating git commands, not a dedicated typed error.
+ */
+export const commit = defineMethod({
+  payload: CommitInput,
+  success: CommitResult,
   error: GitCommandError,
 });
 
