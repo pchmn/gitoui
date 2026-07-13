@@ -4,7 +4,7 @@ import { cn } from '@gitoui/ui/lib/utils';
 import { RefPill } from '@gitoui/ui/ref-pill';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react';
-import { CHANGE_ICON, CHANGE_TONE } from '#renderer/modules/changes/components/changeGlyph';
+import { CHANGE_ICON, CHANGE_LETTER_TONE } from '#renderer/modules/changes/components/changeGlyph';
 import { useStatus } from '#renderer/modules/changes/hooks/useStatus';
 import { useCommitSelection } from '#renderer/modules/commits/CommitSelectionContext';
 import type { GitError } from '#renderer/shared/git/errors';
@@ -217,9 +217,11 @@ type HoverState = {
  * loads a first page instantly, and scrolling toward the loaded end requests the next one. Columns
  * per DESIGN.md `GRAPH · REFS` / `COMMIT` / `AUTHOR` — GRAPH · REFS carries a fixed-width REFS zone
  * (ref pills, issue #43) followed by the lanes zone at a fixed origin (colored lanes, nodes, and
- * merge/branch edges, issue #56, over `laneLayout` from #55), COMMIT shows the subject, AUTHOR shows
- * a relative date + the author's circular avatar + name — the name truncates at a fixed width so
- * the column keeps its rhythm, and hovering the row reveals it in full. Clicking a row selects its
+ * merge/branch edges, issue #56, over `laneLayout` from #55), COMMIT shows the subject, AUTHOR
+ * rests as just a relative date + the author's circular avatar pinned at the row's right edge —
+ * the name is hidden until the row is hovered or selected, then appears to the avatar's right,
+ * nudging the date + avatar left (the avatar's identity color carries "who" down the column at
+ * rest). Clicking a row selects its
  * Commit (issue
  * #46, via `CommitSelectionContext`) — every row fill is a step of the lane-tint ladder, selection
  * being the strongest, persistent one (it outranks hover), per DESIGN.md's Commit-Graph spec.
@@ -641,12 +643,12 @@ export function CommitGraph({ root }: { root: string }) {
                   seed={commit.author.email}
                   shape='circle'
                 />
-                {/* Truncated at a fixed width at rest so the AUTHOR column keeps its rhythm;
-                    hovering the row reveals the full name in place — the subject (already
-                    truncating) absorbs the squeeze. The rest width stays as a minimum so a
-                    short name never shifts the date/avatar; capped so a pathological name
-                    can't eat the row. */}
-                <span className='w-16 truncate group-hover:w-auto group-hover:min-w-16 group-hover:max-w-48'>
+                {/* Hidden at rest — the avatar's identity color already answers "who" down the
+                    column; the name is the on-demand layer, revealed to the avatar's right when
+                    the row is hovered or selected, nudging the `1d • avatar` cluster left while
+                    the subject (already truncating) absorbs the squeeze. Capped so a
+                    pathological name can't eat the row. */}
+                <span className='hidden max-w-48 truncate group-hover:inline group-data-[selected=true]:inline'>
                   {commit.author.name}
                 </span>
               </span>
@@ -841,12 +843,13 @@ function GraphLanesRow({
   );
 }
 
-/** A file-count chip for the WIP summary: the shared change icon + a count, tinted per bucket. */
+/** A file-count chip for the WIP summary: the shared change icon + a count, in the same pastel
+    `--git-*` tone as the Changes panel's status letters — one hue per kind, everywhere. */
 function WipCount({ kind, count }: { kind: 'modified' | 'added' | 'deleted'; count: number }) {
   const Icon = CHANGE_ICON[kind];
   return (
     <span
-      className={cn('flex items-center gap-0.5', CHANGE_TONE[kind])}
+      className={cn('flex items-center gap-0.5', CHANGE_LETTER_TONE[kind])}
       data-slot='wip-filecount'
       data-kind={kind}
     >
@@ -861,10 +864,11 @@ function WipCount({ kind, count }: { kind: 'modified' | 'added' | 'deleted'; cou
  * columns — no ref pill (the dotted node + a persistent stronger tint carry it), a HOLLOW DASHED
  * node in the HEAD Commit's lane column with a short dashed connector dropping toward row 0 (a purely
  * presentational overlay, never part of the lane sweep or frontier), the "Uncommitted changes"
- * subject, and — where a Commit row shows author + time — its change **summary**: file counts by
- * type (the same icons as the Changes panel) and the aggregate `+N −N` lines. No timestamp: the row
- * is always "now". Selecting it anchors the Inspector's Changes mode; selected styling mirrors a
- * Commit row's (the strongest tint step).
+ * subject, and — right beside the subject, not pushed to the row's far edge — its change
+ * **summary**: file counts by type (the same icons AND pastel `--git-*` tones as the Changes
+ * panel) and the aggregate `+N −N` lines. No timestamp: the row is always "now". Selecting it
+ * anchors the Inspector's Changes mode; selected styling mirrors a Commit row's (the strongest
+ * tint step).
  */
 function WipRow({
   col,
@@ -959,10 +963,12 @@ function WipRow({
           />
         </svg>
       </span>
-      <span className='min-w-0 flex-1 truncate font-medium'>{messages.commitGraph.wipSubject}</span>
-      {/* Change summary: file counts by type, then a hairline dot, then the aggregate lines. Any
-          zero bucket / axis is omitted. No timestamp — the WIP row is always "now". */}
-      <span className='flex shrink-0 items-center gap-2 font-mono text-[0.625rem] tabular-nums'>
+      <span className='shrink-0 font-medium'>{messages.commitGraph.wipSubject}</span>
+      {/* Change summary: file counts by type, then a hairline dot, then the aggregate lines — worn
+          in the Changes panel's pastel `--git-*` tones and sitting right beside the subject (the
+          row's one piece of content reads as a unit; the right edge stays quiet). Any zero bucket /
+          axis is omitted. No timestamp — the WIP row is always "now". */}
+      <span className='flex min-w-0 shrink items-center gap-2 ml-2 overflow-hidden font-mono text-[0.625rem] tabular-nums'>
         {(modified > 0 || added > 0 || deleted > 0) && (
           <span className='flex items-center gap-2'>
             {modified > 0 && <WipCount kind='modified' count={modified} />}
@@ -976,8 +982,8 @@ function WipRow({
               ·
             </span>
             <span className='flex items-center gap-1.5'>
-              {additions > 0 && <span className='text-success'>+{additions}</span>}
-              {deletions > 0 && <span className='text-destructive'>−{deletions}</span>}
+              {additions > 0 && <span className='text-git-added'>+{additions}</span>}
+              {deletions > 0 && <span className='text-git-deleted'>−{deletions}</span>}
             </span>
           </>
         )}
