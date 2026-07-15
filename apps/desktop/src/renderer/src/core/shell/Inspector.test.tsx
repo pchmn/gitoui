@@ -28,6 +28,8 @@ vi.stubGlobal('desktop', { platform: 'linux' });
 function stubGit() {
   vi.stubGlobal('git', {
     status: vi.fn().mockResolvedValue({ branch: 'main', ahead: 0, behind: 0, entries: [] }),
+    // AppShell now subscribes via useLiveStatus (issue #64) — stub the unsubscribe function.
+    watchStatus: vi.fn().mockReturnValue(() => {}),
     listBranches: vi
       .fn()
       .mockResolvedValue({ branches: [], head: { _tag: 'OnBranch', branch: 'main' } }),
@@ -107,6 +109,7 @@ describe('Inspector visibility', () => {
             : [{ path: 'a.txt', unstaged: { kind: 'modified' } }],
         }),
       ),
+      watchStatus: vi.fn().mockReturnValue(() => {}),
       stageFile: vi.fn(() => {
         staged = true;
         return Promise.resolve();

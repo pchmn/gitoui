@@ -1,3 +1,4 @@
+import { useLiveStatus } from '#renderer/modules/changes/hooks/useLiveStatus';
 import { CommitSelectionProvider } from '#renderer/modules/commits/CommitSelectionContext';
 import { CommitGraph } from '#renderer/modules/commits/components/CommitGraph';
 import { useActiveRepository } from '#renderer/modules/repository/ActiveRepositoryContext';
@@ -18,10 +19,14 @@ import { TopBar } from './TopBar';
  * `EmptyState` the center stays full-width. On launch it reopens the last active Repository
  * (MRU[0], re-validated — issue #10); the content region stays blank while that one attempt
  * settles, so the empty-state CTA never flashes before a restored repo view.
+ *
+ * Mounts `useLiveStatus` here (not in StatusBar or the Changes panel) so there's exactly one
+ * `RepoWatcher` subscription per active Repository, feeding both.
  */
 export function AppShell() {
   const { root } = useActiveRepository();
   const { isRestoring } = useReopenLastRepository();
+  useLiveStatus(root);
 
   return (
     <SelectionProvider>

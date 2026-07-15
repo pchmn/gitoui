@@ -18,8 +18,8 @@
     "simple-git": "3.36.0"
   },
   "devDependencies": {
-    "@gitoui/tsconfig": "workspace:*",
     "@effect/vitest": "catalog:",
+    "@gitoui/tsconfig": "workspace:*",
     "vitest": "catalog:"
   }
 }
