@@ -1,8 +1,8 @@
-appId: com.gitoui.desktop
+appId: com.gitoui.app
 productName: gitoui
 directories:
   output: release
-  buildResources: build
+  buildResources: resources
 files:
   - out/**
 mac:
@@ -10,4 +10,7 @@ mac:
 win:
   target: nsis
 linux:
-  target: AppImage
+  target:
+    - AppImage
+    - snap
+    - deb
