@@ -120,9 +120,13 @@ export const messages = {
     wipSubject: 'Uncommitted changes',
   },
   commitDetail: {
-    // Minimal seam copy (issue #66) — the full Commit-detail body lands in its own slice.
     heading: 'Commit',
-    placeholder: 'Commit detail coming soon.',
+    copyShaAria: 'Copy commit SHA',
+    shaCopied: 'Copied',
+    failedToLoad: 'Failed to load commit.',
+    repoNotFound: (path: string) => `Repository not found: ${path}`,
+    retry: 'Retry',
+    changesHeading: 'Changes',
   },
   branchSelector: {
     filterPlaceholder: 'Filter branches…',

@@ -36,6 +36,13 @@ function stubGit() {
     createBranch: vi.fn().mockResolvedValue(undefined),
     switchBranch: vi.fn().mockResolvedValue(undefined),
     listCommits: vi.fn().mockResolvedValue([]),
+    commitDetail: vi.fn().mockResolvedValue({
+      sha: 'deadbeef123',
+      author: { name: 'Test', email: 'test@test.com' },
+      date: Date.now(),
+      message: 'test commit',
+      changes: [],
+    }),
     openRepository: vi.fn().mockResolvedValue('/repo'),
     listRecentRepositories: vi.fn().mockResolvedValue([]),
     removeRecentRepository: vi.fn().mockResolvedValue(undefined),

@@ -228,6 +228,43 @@ export const Commit = Schema.Struct({
 });
 export type Commit = typeof Commit.Type;
 
+/**
+ * One Change a Commit introduced (issue #65): unlike `StatusEntry`'s two-axis split, a Commit's
+ * Change is a single fact — `kind` sits directly on the record instead of behind a `staged`/
+ * `unstaged` axis. `oldPath` is set only for renames (the pre-rename path; `path` is always the
+ * current/new path), `additions`/`deletions` OMITTED for binary files, same as `StatusChange`.
+ */
+export const Change = Schema.Struct({
+  path: Schema.String,
+  oldPath: Schema.optional(Schema.String),
+  kind: ChangeKind,
+  additions: Schema.optional(Schema.Number),
+  deletions: Schema.optional(Schema.Number),
+});
+export type Change = typeof Change.Type;
+
+/**
+ * The Inspector's Commit-detail mode (issue #65): one Commit's metadata + the Changes it
+ * introduced. `message` is the FULL message (subject + body), unlike `Commit.subject`/`Commit.body`
+ * kept separate for the graph. `date` is the authored-at epoch MS (pairs with `author`, mirroring
+ * the graph's own use of `authoredAt` for its relative-date column).
+ */
+export const CommitDetail = Schema.Struct({
+  sha: Schema.String,
+  author: Schema.Struct({ name: Schema.String, email: Schema.String }),
+  date: Schema.Number,
+  message: Schema.String,
+  changes: Schema.Array(Change),
+});
+export type CommitDetail = typeof CommitDetail.Type;
+
+/** Input for `commitDetail`. `RepoInput` has no `sha` field, so a new struct. */
+export const CommitDetailInput = Schema.Struct({
+  repoPath: Schema.String,
+  sha: Schema.String,
+});
+export type CommitDetailInput = typeof CommitDetailInput.Type;
+
 /** Input for `listCommits`. `RepoInput` has no `skip`/`limit` fields, so a new struct. */
 export const ListCommitsInput = Schema.Struct({
   repoPath: Schema.String,
@@ -387,5 +424,17 @@ export const listStashes = defineMethod({
 export const listCommits = defineMethod({
   payload: ListCommitsInput,
   success: Schema.Array(Commit),
+  error: RepoNotFoundError,
+});
+
+/**
+ * The Inspector's Commit-detail mode (issue #65): one Commit's metadata + the Changes it
+ * introduced, computed from two `diff-tree` calls against the seam revision (the empty tree for a
+ * root Commit, `<sha>^1` otherwise — never the combined-diff default for a merge). Maps
+ * `GitProcessError` → `RepoNotFoundError`, same as `listCommits`.
+ */
+export const commitDetail = defineMethod({
+  payload: CommitDetailInput,
+  success: CommitDetail,
   error: RepoNotFoundError,
 });
