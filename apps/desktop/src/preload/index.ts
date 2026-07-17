@@ -6,6 +6,8 @@ import type {
 import type {
   BranchList,
   Commit,
+  CommitDetail,
+  CommitDetailInput,
   CommitInput,
   CommitResult,
   CreateBranchInput,
@@ -77,6 +79,8 @@ const git = {
     invoke(CHANNELS.git.listStashes, input) as Promise<StashList>,
   listCommits: (input: ListCommitsInput): Promise<readonly Commit[]> =>
     invoke(CHANNELS.git.listCommits, input) as Promise<readonly Commit[]>,
+  commitDetail: (input: CommitDetailInput): Promise<CommitDetail> =>
+    invoke(CHANNELS.git.commitDetail, input) as Promise<CommitDetail>,
 };
 
 const desktop = {

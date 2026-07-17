@@ -74,10 +74,14 @@ export function ChangesPanel() {
   const entries = status?.entries ?? [];
   // Map (not filter) so each group's rows carry their OWN axis's `StatusChange` without a
   // non-null assertion — a path Staged AND Unstaged contributes one row to each group.
-  const staged = entries.flatMap((e) => (e.staged ? [{ path: e.path, change: e.staged }] : []));
-  const unstaged = entries.flatMap((e) =>
-    e.unstaged ? [{ path: e.path, change: e.unstaged }] : [],
-  );
+  // Sort each group by path so untracked files sit beside their siblings — git lists them last.
+  const byPath = (a: { path: string }, b: { path: string }) => a.path.localeCompare(b.path);
+  const staged = entries
+    .flatMap((e) => (e.staged ? [{ path: e.path, change: e.staged }] : []))
+    .sort(byPath);
+  const unstaged = entries
+    .flatMap((e) => (e.unstaged ? [{ path: e.path, change: e.unstaged }] : []))
+    .sort(byPath);
 
   if (staged.length === 0 && unstaged.length === 0) {
     return (

@@ -11,6 +11,7 @@ import {
   GitClient,
   isUnbornHeadError,
   parseCommitLog,
+  parseDiffTreeNameStatus,
   parseForEachRef,
   parseNumstat,
   parseOverwriteError,
@@ -1454,4 +1455,153 @@ describe('extractCommitFailureMessage', () => {
     expect(extractCommitFailureMessage('')).toBe('nothing to commit');
     expect(extractCommitFailureMessage('\n\n')).toBe('nothing to commit');
   });
+});
+
+// --- parseDiffTreeNameStatus unit tests (pure, pinned output) ---
+
+describe('parseDiffTreeNameStatus', () => {
+  it('parses ordinary M/A/D records (NUL-separated status + path)', () => {
+    const stdout = `${['M', 'a.txt', 'A', 'b.txt', 'D', 'c.txt'].join('\0')}\0`;
+    expect(parseDiffTreeNameStatus(stdout)).toEqual([
+      { path: 'a.txt', kind: 'modified' },
+      { path: 'b.txt', kind: 'added' },
+      { path: 'c.txt', kind: 'deleted' },
+    ]);
+  });
+
+  it('parses a rename record (status, oldPath, newPath — three NUL tokens)', () => {
+    const stdout = `${['R100', 'old.txt', 'new.txt'].join('\0')}\0`;
+    expect(parseDiffTreeNameStatus(stdout)).toEqual([
+      { path: 'new.txt', oldPath: 'old.txt', kind: 'renamed' },
+    ]);
+  });
+
+  it('maps a copy record (C) to added, keyed on the new path', () => {
+    const stdout = `${['C75', 'old.txt', 'copy.txt'].join('\0')}\0`;
+    expect(parseDiffTreeNameStatus(stdout)).toEqual([
+      { path: 'copy.txt', oldPath: 'old.txt', kind: 'added' },
+    ]);
+  });
+
+  it('returns [] for empty output', () => {
+    expect(parseDiffTreeNameStatus('')).toEqual([]);
+  });
+});
+
+// --- GitClient.commitDetail (temp repo, pinned against real git output) ---
+
+describe('GitClient.commitDetail', () => {
+  let base: string;
+  let repo: string;
+  let rootSha: string;
+  let normalSha: string;
+  let renameSha: string;
+  let mergeSha: string;
+
+  const g = (cwd: string, ...args: string[]) =>
+    execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+
+  beforeAll(() => {
+    base = realpathSync(mkdtempSync(join(tmpdir(), 'gitoui-commitdetail-')));
+    repo = join(base, 'repo');
+    mkdirSync(repo, { recursive: true });
+    execFileSync('git', ['init', '-q', '-b', 'main', repo], { cwd: base });
+    execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: repo });
+    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: repo });
+
+    // Root commit — no parent, so its whole tree reads as added (diffed against the empty tree).
+    writeFileSync(join(repo, 'a.txt'), 'a\n');
+    g(repo, 'add', 'a.txt');
+    g(repo, 'commit', '-m', 'root commit');
+    rootSha = g(repo, 'rev-parse', 'HEAD');
+
+    // Normal commit — modifies a.txt and adds a file, diffed against its one parent.
+    writeFileSync(join(repo, 'a.txt'), 'a\nb\n');
+    mkdirSync(join(repo, 'dir'));
+    writeFileSync(join(repo, 'dir', 'c.txt'), 'c\n');
+    g(repo, 'add', '-A');
+    g(repo, 'commit', '-m', 'normal commit');
+    normalSha = g(repo, 'rev-parse', 'HEAD');
+
+    // Rename commit — a pure `git mv`, no content change, so numstat carries 0/0.
+    g(repo, 'mv', 'dir/c.txt', 'dir/d.txt');
+    g(repo, 'commit', '-m', 'rename commit');
+    renameSha = g(repo, 'rev-parse', 'HEAD');
+
+    // Merge commit — a sibling branch off the rename commit merges back in with --no-ff; main
+    // hasn't advanced since the branch point, so the first-parent diff is exactly the feature
+    // branch's own new file (never git's combined-diff default, which reads as noise here too).
+    g(repo, 'checkout', '-q', '-b', 'feature');
+    writeFileSync(join(repo, 'feat.txt'), 'feat\n');
+    g(repo, 'add', 'feat.txt');
+    g(repo, 'commit', '-m', 'feature commit');
+    g(repo, 'checkout', '-q', 'main');
+    g(repo, 'merge', '--no-ff', '-q', '-m', 'merge feature', 'feature');
+    mergeSha = g(repo, 'rev-parse', 'HEAD');
+  });
+
+  afterAll(() => rmSync(base, { recursive: true, force: true }));
+
+  it.effect('root commit: diffs against the empty tree, whole tree shows as added', () =>
+    Effect.gen(function* () {
+      const client = yield* GitClient;
+      const detail = yield* client.commitDetail(repo, rootSha);
+      expect(detail.sha).toBe(rootSha);
+      expect(detail.message).toBe('root commit');
+      expect(detail.changes).toEqual([
+        { path: 'a.txt', kind: 'added', additions: 1, deletions: 0 },
+      ]);
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('normal commit: diffs against its one parent, with per-path stats', () =>
+    Effect.gen(function* () {
+      const client = yield* GitClient;
+      const detail = yield* client.commitDetail(repo, normalSha);
+      expect(detail.changes).toEqual([
+        { path: 'a.txt', kind: 'modified', additions: 1, deletions: 0 },
+        { path: 'dir/c.txt', kind: 'added', additions: 1, deletions: 0 },
+      ]);
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('rename commit: the row carries oldPath, no line-count change', () =>
+    Effect.gen(function* () {
+      const client = yield* GitClient;
+      const detail = yield* client.commitDetail(repo, renameSha);
+      expect(detail.changes).toEqual([
+        { path: 'dir/d.txt', oldPath: 'dir/c.txt', kind: 'renamed', additions: 0, deletions: 0 },
+      ]);
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect(
+    'merge commit: diffs against the FIRST parent only, not the combined-diff default',
+    () =>
+      Effect.gen(function* () {
+        const client = yield* GitClient;
+        const detail = yield* client.commitDetail(repo, mergeSha);
+        expect(detail.changes).toEqual([
+          { path: 'feat.txt', kind: 'added', additions: 1, deletions: 0 },
+        ]);
+      }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('carries the full message (subject + body)', () =>
+    Effect.gen(function* () {
+      const client = yield* GitClient;
+      g(repo, 'commit', '--allow-empty', '-m', 'subject line\n\nbody line one\nbody line two');
+      const sha = g(repo, 'rev-parse', 'HEAD');
+      const detail = yield* client.commitDetail(repo, sha);
+      expect(detail.message).toBe('subject line\n\nbody line one\nbody line two');
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('fails with RepoNotFoundError for a bad repo path', () =>
+    Effect.gen(function* () {
+      const client = yield* GitClient;
+      const error = yield* Effect.flip(client.commitDetail(join(base, 'does-not-exist'), rootSha));
+      expect(error._tag).toBe('RepoNotFoundError');
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
 });

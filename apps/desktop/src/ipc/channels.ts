@@ -24,6 +24,7 @@ export const CHANNELS = {
     listTags: 'git:listTags',
     listStashes: 'git:listStashes',
     listCommits: 'git:listCommits',
+    commitDetail: 'git:commitDetail',
   },
   desktop: {
     pickRepository: 'desktop:pickRepository',

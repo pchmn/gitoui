@@ -1,8 +1,10 @@
 import type {
   Branch,
   BranchList,
+  Change,
   ChangeKind,
   Commit,
+  CommitDetail,
   Ref,
   Remote,
   RemoteList,
@@ -471,6 +473,49 @@ export function parseNumstat(
 }
 
 /**
+ * The canonical empty-tree SHA (`git hash-object -t tree /dev/null`) — every git repository shares
+ * this constant object. Diffing a root Commit against it is the standard way to see its full tree
+ * as added, since a root Commit has no parent to diff against (issue #65).
+ */
+export const EMPTY_TREE_SHA = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+
+/**
+ * Parse `git diff-tree -r -M -z --name-status <base> <sha>` into a `{ path, oldPath?, kind }[]`
+ * (issue #65). With `-z`, name-status is fully NUL-token-delimited (unlike `git status`'s TAB-then-
+ * NUL mix): an ordinary record is `<status>\0<path>\0`; a rename/copy record (`-M` detects renames)
+ * is `<R|C><score>\0<oldPath>\0<newPath>\0` — three tokens, `path` keyed on the NEW path. Reuses
+ * `mapStatusCode` on the status token's first letter (`R100` → `R`).
+ *
+ * Pure function — no IO — so it can be unit-tested against pinned output without spawning git.
+ */
+export function parseDiffTreeNameStatus(
+  stdout: string,
+): { path: string; oldPath?: string; kind: ChangeKind }[] {
+  const changes: { path: string; oldPath?: string; kind: ChangeKind }[] = [];
+  const tokens = stdout.split('\0').filter((token) => token.length > 0);
+
+  let i = 0;
+  while (i < tokens.length) {
+    const status = tokens[i] ?? '';
+    const letter = status[0] ?? '';
+    const kind = mapStatusCode(letter);
+
+    if (letter === 'R' || letter === 'C') {
+      const oldPath = tokens[i + 1] ?? '';
+      const path = tokens[i + 2] ?? '';
+      changes.push({ path, oldPath, kind });
+      i += 3;
+    } else {
+      const path = tokens[i + 1] ?? '';
+      changes.push({ path, kind });
+      i += 2;
+    }
+  }
+
+  return changes;
+}
+
+/**
  * Enrich one axis's `StatusChange` with its numstat line counts. A missing change stays missing; a
  * missing/empty (binary) stats lookup leaves `additions`/`deletions` off.
  */
@@ -858,5 +903,53 @@ export class GitClient extends Effect.Service<GitClient>()('@gitoui/core/GitClie
             : Effect.fail(new RepoNotFoundError({ path: repoPath }));
         }),
       ),
+
+    /**
+     * The Inspector's Commit-detail mode (issue #65): one Commit's metadata + the Changes it
+     * introduced. Metadata reuses `listCommits`'s own format string on a single `sha` (`git log -1`).
+     * The Changes composition mirrors `status`'s enriched two-call shape, merged by path:
+     *
+     * 1. `git diff-tree -r -M -z --name-status <base> <sha>` — the change kinds (`-M` detects
+     *    renames, surfaced as `oldPath`).
+     * 2. `git diff-tree -r -M -z --numstat <base> <sha>` — per-path line counts, keyed the same way
+     *    `parseNumstat` already keys a `git diff --numstat` rename (new path).
+     *
+     * `<base>` is the seam: `EMPTY_TREE_SHA` for a root Commit (no parent to diff against, so its
+     * whole tree reads as added), else `<sha>^1` — a merge Commit is diffed against its FIRST parent
+     * only, never git's combined-diff default (which reads as noise for a two-or-more-parent
+     * Commit). Maps `GitProcessError` → `RepoNotFoundError`, same as `listCommits`.
+     */
+    commitDetail: (repoPath: string, sha: string): Effect.Effect<CommitDetail, RepoNotFoundError> =>
+      withGit(repoPath, async (git) => {
+        const log = await git.raw([
+          'log',
+          '-1',
+          '--decorate=full',
+          '--format=%H%x1f%P%x1f%an%x1f%ae%x1f%cn%x1f%ce%x1f%at%x1f%ct%x1f%s%x1f%b%x1f%D%x1e',
+          sha,
+        ]);
+        const [commit] = parseCommitLog(log);
+        if (commit === undefined) throw new Error(`unknown revision: ${sha}`);
+
+        const base = commit.parents.length === 0 ? EMPTY_TREE_SHA : `${sha}^1`;
+        const [nameStatus, numstat] = await Promise.all([
+          git.raw(['diff-tree', '-r', '-M', '-z', '--name-status', base, sha]),
+          git.raw(['diff-tree', '-r', '-M', '-z', '--numstat', base, sha]),
+        ]);
+
+        const stats = parseNumstat(numstat);
+        const changes: Change[] = parseDiffTreeNameStatus(nameStatus).map((change) => ({
+          ...change,
+          ...stats.get(change.path),
+        }));
+
+        return {
+          sha: commit.sha,
+          author: commit.author,
+          date: commit.authoredAt,
+          message: commit.body.length > 0 ? `${commit.subject}\n\n${commit.body}` : commit.subject,
+          changes,
+        } satisfies CommitDetail;
+      }).pipe(Effect.catchTag('GitProcessError', () => new RepoNotFoundError({ path: repoPath }))),
   },
 }) {}

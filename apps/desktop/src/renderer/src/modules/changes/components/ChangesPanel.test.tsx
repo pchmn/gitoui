@@ -267,6 +267,23 @@ describe('ChangesPanel groups', () => {
     expect(screen.queryByText(/^\+/)).toBeNull();
     expect(screen.queryByText(/^−/)).toBeNull();
   });
+
+  it('sorts each group by path so untracked files interleave with their siblings', async () => {
+    // Given in git's raw order (tracked first, untracked last); the panel re-sorts by path.
+    const entries: StatusEntry[] = [
+      { path: 'src/beta.ts', unstaged: { kind: 'modified' } },
+      { path: 'src/delta.ts', unstaged: { kind: 'modified' } },
+      { path: 'src/alpha.ts', unstaged: { kind: 'untracked' } },
+      { path: 'src/gamma.ts', unstaged: { kind: 'untracked' } },
+    ];
+    render(<Wrapper statusMock={() => Promise.resolve(makeStatus({ entries }))} />);
+
+    const group = await screen.findByRole('listbox', { name: 'Unstaged' });
+    const names = Array.from(group.querySelectorAll('[role="option"] .font-medium')).map(
+      (span) => span.textContent,
+    );
+    expect(names).toEqual(['alpha.ts', 'beta.ts', 'delta.ts', 'gamma.ts']);
+  });
 });
 
 describe('ChangesPanel staging', () => {
