@@ -19,6 +19,13 @@ export const withGit = <A>(
   use: (git: SimpleGit) => Promise<A>,
 ): Effect.Effect<A, GitProcessError> =>
   Effect.tryPromise({
-    try: (signal) => use(simpleGit({ baseDir: cwd, abort: signal })),
+    // --no-optional-locks: gitoui's git calls run in the background on the user's behalf, so they
+    // must skip optional sub-operations that take a lock — most importantly `status` must not
+    // refresh `.git/index` as a side effect, which RepoWatcher would see as a repo change and
+    // recompute from its own recompute (ADR 0015). Mandatory locks (add/commit) are unaffected.
+    // As a binary arg (not GIT_OPTIONAL_LOCKS via `.env()`) because `.env()` replaces the child's
+    // whole environment and simple-git then rejects the user's own GIT_SSH_COMMAND/GIT_ASKPASS.
+    try: (signal) =>
+      use(simpleGit({ baseDir: cwd, abort: signal, binary: ['git', '--no-optional-locks'] })),
     catch: (cause) => new GitProcessError({ cwd, cause }),
   });

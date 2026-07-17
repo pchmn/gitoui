@@ -25,6 +25,8 @@ vi.stubGlobal('desktop', { platform: 'linux' });
 function stubGit(listBranches?: () => Promise<BranchList>) {
   vi.stubGlobal('git', {
     status: vi.fn().mockResolvedValue({ branch: 'main', ahead: 0, behind: 0, entries: [] }),
+    // AppShell now subscribes via useLiveStatus (issue #64) — stub the unsubscribe function.
+    watchStatus: vi.fn().mockReturnValue(() => {}),
     listBranches:
       listBranches !== undefined
         ? vi.fn(listBranches)

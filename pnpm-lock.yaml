@@ -9,45 +9,9 @@ catalogs:
     '@effect/vitest':
       specifier: 0.29.0
       version: 0.29.0
-    '@phosphor-icons/react':
-      specifier: ^2.1.10
-      version: 2.1.10
-    '@tailwindcss/vite':
-      specifier: 4.3.0
-      version: 4.3.0
-    '@tanstack/query-db-collection':
-      specifier: 1.0.45
-      version: 1.0.45
-    '@tanstack/react-db':
-      specifier: 0.1.85
-      version: 0.1.85
-    '@tanstack/react-query':
-      specifier: 5.101.0
-      version: 5.101.0
-    '@tanstack/react-router':
-      specifier: 1.170.11
-      version: 1.170.11
-    '@tanstack/react-virtual':
-      specifier: 3.14.5
-      version: 3.14.5
-    '@types/react':
-      specifier: 19.2.16
-      version: 19.2.16
-    '@types/react-dom':
-      specifier: 19.2.3
-      version: 19.2.3
     effect:
       specifier: 3.21.2
       version: 3.21.2
-    react:
-      specifier: 19.2.7
-      version: 19.2.7
-    react-dom:
-      specifier: 19.2.7
-      version: 19.2.7
-    tailwindcss:
-      specifier: 4.3.0
-      version: 4.3.0
     vitest:
       specifier: ^3.2.0
       version: 3.2.6
