@@ -1,6 +1,9 @@
 {
   "name": "@gitoui/desktop",
   "version": "0.0.0",
+  "description": "A calm, fast desktop git client where the commit graph is the protagonist.",
+  "author": "pchmn",
+  "repository": "https://github.com/pchmn/gitoui",
   "private": true,
   "type": "module",
   "main": "out/main/index.js",
@@ -13,6 +16,9 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "build:app": "electron-vite build && electron-builder",
+    "build:mac": "electron-vite build && electron-builder --mac",
+    "build:win": "electron-vite build && electron-builder --win",
+    "build:linux": "electron-vite build && electron-builder --linux",
     "start": "electron-vite preview",
     "check-types": "tsgo --build --noEmit tsconfig.json",
     "test": "vitest run"
