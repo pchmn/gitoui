@@ -47,7 +47,7 @@ export function ChangeRow({
     <div
       role='option'
       tabIndex={0}
-      className='group relative flex h-7 cursor-default select-none items-center gap-2 rounded-sm px-3 hover:bg-muted focus-within:bg-muted'
+      className='group relative flex h-7 shrink-0 cursor-default select-none items-center gap-2 rounded-sm px-3 hover:bg-muted focus-within:bg-muted'
       title={path}
     >
       {/* The filename owns the space: it never shrinks (only ellipsizing if it alone overruns the
