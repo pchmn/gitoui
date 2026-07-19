@@ -24,9 +24,9 @@ export const PAGE_LIMIT = 300;
  * `queryCollectionOptions` without a `schema` wants a mutable item type — `effect/Schema` types
  * are all-`readonly`), tagged with the `repoPath` it belongs to, because the collection holds
  * *all* repos' commits and live queries narrow by `where(eq(commits.repoPath, …))`, and carrying
- * `seq` — the row's position in `listCommits`'s (topo-ordered, `scope: 'allRefs'`) walk, since the
+ * `seq` — the row's position in `listCommits`'s (`--date-order`, `scope: 'allRefs'`) walk, since the
  * collection is an unordered key→value store and the lane sweep (ADR 0007) requires strict
- * children-before-parents order, which `committedAt` doesn't guarantee (clock skew, rebases).
+ * children-before-parents order, which a plain `committedAt` sort doesn't guarantee (clock skew, rebases).
  */
 type CommitRow = { -readonly [K in keyof Commit]: Commit[K] } & { repoPath: string; seq: number };
 
@@ -87,7 +87,7 @@ function commitsCollection(queryClient: QueryClient): CommitsCollection {
           // remote-tracking branch, and Tag (issue #54).
           scope: 'allRefs',
         });
-        // `seq` is the absolute position in the topo-ordered walk (`skip` + the row's offset
+        // `seq` is the absolute position in the date-ordered walk (`skip` + the row's offset
         // within this fetch) — stable across overlapping subsets (issue #44's grown-window
         // re-fetch) since `scope: 'allRefs'` always walks the same HEAD-rooted order from 0.
         return commits.map((commit, i) => ({ ...commit, repoPath, seq: skip + i }));
@@ -137,11 +137,12 @@ export function useCommits(repoPath: string | null): {
 
   // A collection is an unordered key→value store, so a bare `q.from` iterates in the collection's
   // internal (key) order, *not* `git log`'s order — hence the explicit `orderBy`. We sort by
-  // `seq` ascending — the topo-ordered position `listCommits`'s `scope: 'allRefs'` walk assigned
-  // (ADR 0007) — rather than `committedAt`, because the lane sweep requires strict
-  // children-before-parents order, which commit dates don't guarantee. `''` is the "no Repository
-  // open" sentinel — it matches no rows and the `queryFn` fetches nothing for it. (The collection
-  // stays out of the deps — it's stable per QueryClient.)
+  // `seq` ascending — the date-ordered position `listCommits`'s `scope: 'allRefs'` walk assigned
+  // (ADR 0007) — rather than re-sorting by `committedAt` here, because `--date-order` already
+  // interleaves by date while guaranteeing children before parents (the invariant the lane sweep
+  // needs), which a naive `committedAt` sort would break under clock skew. `''` is the "no
+  // Repository open" sentinel — it matches no rows and the `queryFn` fetches nothing for it. (The
+  // collection stays out of the deps — it's stable per QueryClient.)
   const { data, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage } = useLivePaginatedQuery(
     (q) =>
       q

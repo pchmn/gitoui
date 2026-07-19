@@ -23,6 +23,8 @@ colors:
   lane-3: "oklch(0.450 0.12 170.6)"
   lane-4: "oklch(0.600 0.12 230.6)"
   lane-5: "oklch(0.500 0.12 290.6)"
+  syntax-keyword: "oklch(0.450 0.1050 50.6)"
+  syntax-string: "oklch(0.550 0.0787 90.6)"
 typography:
   heading:
     fontFamily: "DM Sans Variable, sans-serif"
@@ -182,6 +184,20 @@ saturation reserved for actions, state, and the graph.
   *adjacent* lanes ≥0.10 apart, including at the `col % 5` wrap. Lanes are distinguished by
   **lightness + position + ref label**, not hue alone. Runtime tokens are `--lane-1…5` (the shadcn
   `--chart-*` set is not the graph's).
+
+### Code Syntax — the Code & Diff view
+- **Syntax Keyword** (`--syntax-keyword`, `oklch(0.45 0.105 50.6)`) / **Syntax String**
+  (`--syntax-string`, `oklch(0.55 0.0787 90.6)`): the ONLY two accents the Code & Diff view's Shiki
+  theme spends — both source-derived (the Living Tint Rule), lifted in chroma/lightness just enough
+  to read as an accent against the code panel's mostly-Ink/Muted-Ink body. Everything else
+  (constants, functions, parameters, punctuation) falls back to Ink; comments to Muted Ink — a
+  restrained set on purpose (DESIGN §1): syntax highlighting must not turn the code panel into a
+  rainbow that competes with the graph. Dark mode lifts both toward the luminous band
+  (`oklch(0.78 …)` / `oklch(0.75 …)`), mirroring the lane lift.
+- Wired to `@pierre/diffs`'s CSS-variable Shiki theme via `--diffs-token-*` custom properties
+  (`globals.css`) — one theme name serves both light and dark, since the underlying tokens already
+  flip with the `.dark` cascade; additions/deletions in the diff body reuse the fixed `--success`/
+  `--destructive` tokens as low-alpha (`12%`) line backgrounds, never saturated blocks.
 
 ### Semantic
 - **Alert** (`oklch(0.577 0.245 27.325)`): the one fixed, source-independent color — destructive

@@ -11,6 +11,7 @@ import {
   MagnifyingGlassIcon,
   StackIcon,
   TagIcon,
+  TreeViewIcon,
 } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
@@ -186,9 +187,9 @@ function RailFilter({
           title={viewMode === 'tree' ? 'Switch to flat list view' : 'Switch to tree view'}
         >
           {viewMode === 'tree' ? (
-            <ListBulletsIcon className='size-3.5' aria-hidden='true' />
+            <ListViewIcon className='size-4' aria-hidden='true' />
           ) : (
-            <RecursiveTreeIcon className='size-3.5' aria-hidden='true' />
+            <TreeViewIcon className='size-4' aria-hidden='true' weight='duotone' />
           )}
         </InputGroupButton>
       </InputGroupAddon>
@@ -475,6 +476,60 @@ function StashesSectionShell({
         );
       }}
     </StashesSectionCount>
+  );
+}
+
+function ListViewIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      width='141'
+      height='141'
+      viewBox='0 0 141 141'
+      fill='none'
+      xmlns='http://www.w3.org/2000/svg'
+      className={className}
+    >
+      <title>List View</title>
+      <path
+        d='M17 19C17 14.0294 21.0294 10 26 10H39C43.9706 10 48 14.0294 48 19V32C48 36.9706 43.9706 41 39 41H26C21.0294 41 17 36.9706 17 32V19Z'
+        fill='currentColor'
+        fill-opacity='0.2'
+      />
+      <path
+        d='M39 33V41H26L26 33H39ZM40 32V19C40 18.4477 39.5523 18 39 18H26C25.4477 18 25 18.4477 25 19V32C25 32.5523 25.4477 33 26 33L26 41C21.0294 41 17 36.9706 17 32V19C17 14.1847 20.7817 10.2526 25.5371 10.0117L26 10H39L39.4629 10.0117C44.2183 10.2526 48 14.1847 48 19V32L47.9883 32.4629C47.7474 37.2183 43.8153 41 39 41V33C39.5523 33 40 32.5523 40 32Z'
+        fill='currentColor'
+      />
+      <path
+        d='M119.5 21C121.985 21 124 23.0147 124 25.5C124 27.9853 121.985 30 119.5 30H47.5C45.0147 30 43 27.9853 43 25.5C43 23.0147 45.0147 21 47.5 21H119.5Z'
+        fill='currentColor'
+      />
+      <path
+        d='M17 109C17 104.029 21.0294 100 26 100H39C43.9706 100 48 104.029 48 109V122C48 126.971 43.9706 131 39 131H26C21.0294 131 17 126.971 17 122V109Z'
+        fill='currentColor'
+        fill-opacity='0.2'
+      />
+      <path
+        d='M39 123V131H26L26 123H39ZM40 122V109C40 108.448 39.5523 108 39 108H26C25.4477 108 25 108.448 25 109V122C25 122.552 25.4477 123 26 123L26 131C21.0294 131 17 126.971 17 122V109C17 104.185 20.7817 100.253 25.5371 100.012L26 100H39L39.4629 100.012C44.2183 100.253 48 104.185 48 109V122L47.9883 122.463C47.7474 127.218 43.8153 131 39 131V123C39.5523 123 40 122.552 40 122Z'
+        fill='currentColor'
+      />
+      <path
+        d='M119.5 111C121.985 111 124 113.015 124 115.5C124 117.985 121.985 120 119.5 120H47.5C45.0147 120 43 117.985 43 115.5C43 113.015 45.0147 111 47.5 111H119.5Z'
+        fill='currentColor'
+      />
+      <path
+        d='M17 64C17 59.0294 21.0294 55 26 55H39C43.9706 55 48 59.0294 48 64V77C48 81.9706 43.9706 86 39 86H26C21.0294 86 17 81.9706 17 77V64Z'
+        fill='currentColor'
+        fill-opacity='0.2'
+      />
+      <path
+        d='M39 78V86H26L26 78H39ZM40 77V64C40 63.4477 39.5523 63 39 63H26C25.4477 63 25 63.4477 25 64V77C25 77.5523 25.4477 78 26 78L26 86C21.0294 86 17 81.9706 17 77V64C17 59.1847 20.7817 55.2526 25.5371 55.0117L26 55H39L39.4629 55.0117C44.2183 55.2526 48 59.1847 48 64V77L47.9883 77.4629C47.7474 82.2183 43.8153 86 39 86V78C39.5523 78 40 77.5523 40 77Z'
+        fill='currentColor'
+      />
+      <path
+        d='M119.5 66C121.985 66 124 68.0147 124 70.5C124 72.9853 121.985 75 119.5 75H47.5C45.0147 75 43 72.9853 43 70.5C43 68.0147 45.0147 66 47.5 66H119.5Z'
+        fill='currentColor'
+      />
+    </svg>
   );
 }
 

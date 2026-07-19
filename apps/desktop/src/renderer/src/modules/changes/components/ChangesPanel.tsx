@@ -7,6 +7,7 @@ import {
 } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
+import { useCenterView } from '#renderer/modules/diff/CenterViewContext';
 import type { GitError } from '#renderer/shared/git/errors';
 import { messages } from '#renderer/shared/messages/messages';
 import { matchError } from '#renderer/shared/utils/matchError';
@@ -43,6 +44,19 @@ export function ChangesPanel() {
   const { root } = useActiveRepository();
   const { data: status, isLoading, isError, error, retry } = useStatus(root);
   const { stageFile, unstageFile, stageAll, unstageAll } = useStaging();
+  const { open: openDiff, file: openFile } = useCenterView();
+
+  // Staging folds a path's change onto the other axis (Unstaged→Staged, the reverse for unstaging),
+  // emptying the axis the Code & Diff view was reading. If the open file crosses over, re-target it
+  // to where the same content now lives so the diff keeps showing it instead of going blank. `path`
+  // omitted = a bulk (Stage all / Unstage all) that moves every file on that axis.
+  const followOpenFile = (to: 'staged' | 'unstaged', path?: string) => {
+    if (openFile === null || openFile.source.kind === 'commit') return;
+    const movedFrom = to === 'staged' ? 'unstaged' : 'staged';
+    if (openFile.source.kind !== movedFrom) return;
+    if (path !== undefined && openFile.path !== path) return;
+    openDiff({ path: openFile.path, source: { kind: to } });
+  };
 
   if (root === null) return null;
 
@@ -102,7 +116,10 @@ export function ChangesPanel() {
           emptyHint={messages.changesPanel.emptyUnstaged}
           action={{
             label: messages.changesPanel.stageAll,
-            onClick: () => stageAll.mutate(),
+            onClick: () => {
+              stageAll.mutate();
+              followOpenFile('staged');
+            },
             disabled: stageAll.isPending,
           }}
         >
@@ -112,7 +129,11 @@ export function ChangesPanel() {
               path={row.path}
               change={row.change}
               checked={false}
-              onToggle={() => stageFile.mutate(row.path)}
+              onToggle={() => {
+                stageFile.mutate(row.path);
+                followOpenFile('staged', row.path);
+              }}
+              onOpen={() => openDiff({ path: row.path, source: { kind: 'unstaged' } })}
             />
           ))}
         </ChangeGroup>
@@ -124,7 +145,10 @@ export function ChangesPanel() {
           emptyHint={messages.changesPanel.emptyStaged}
           action={{
             label: messages.changesPanel.unstageAll,
-            onClick: () => unstageAll.mutate(),
+            onClick: () => {
+              unstageAll.mutate();
+              followOpenFile('unstaged');
+            },
             disabled: unstageAll.isPending,
           }}
         >
@@ -134,7 +158,11 @@ export function ChangesPanel() {
               path={row.path}
               change={row.change}
               checked
-              onToggle={() => unstageFile.mutate(row.path)}
+              onToggle={() => {
+                unstageFile.mutate(row.path);
+                followOpenFile('unstaged', row.path);
+              }}
+              onOpen={() => openDiff({ path: row.path, source: { kind: 'staged' } })}
             />
           ))}
         </ChangeGroup>

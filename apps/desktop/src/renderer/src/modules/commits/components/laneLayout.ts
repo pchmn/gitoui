@@ -64,8 +64,8 @@ function allocateSlot(lanes: FrontierLane[], minCol: number): number {
 }
 
 /**
- * The pure lane-layout sweep (ADR 0007): walks a page of topo-ordered Commits (children before
- * parents) top-to-bottom, threading a frontier of open lanes, and emits one `LayoutRow` per Commit
+ * The pure lane-layout sweep (ADR 0007): walks a page of Commits in children-before-parents order
+ * (git's `--date-order`) top-to-bottom, threading a frontier of open lanes, and emits one `LayoutRow` per Commit
  * plus the `frontierOut` to feed into the next page's call. Zero DOM, zero rendering — rendering
  * consumes the row-local segments (`verticals`/`above`/`below`) in a later slice.
  */

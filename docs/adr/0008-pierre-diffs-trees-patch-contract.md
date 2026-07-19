@@ -42,6 +42,11 @@ error, the renderer refetches. No patch text is ever round-tripped from the rend
 - Syntax highlighting arrives with the library (Shiki): no separate highlighter integration. What
   remains ours is a custom Shiki theme emitting the OKLCH token variables (light + dark), specified
   in `DESIGN.md`, so the code panel obeys the source-derived palette and stays restrained.
+- We run the highlighter on the main thread (`disableWorkerPool` — bundling the worker entrypoint is
+  future work), so the library's very first render of a file paints nothing until Shiki's theme +
+  grammar have loaded, then relies on an async re-render that is unreliable under StrictMode.
+  Mitigation: `DiffBody` preloads the shared highlighter for the file's language and mounts `FileDiff`
+  only once it can paint synchronously.
 - Hunk expansion on a partial patch is not native to the library; the contents shipped in the
   contract keep that door open but the integration is explicitly future work.
 - Two runtime dependencies from one young vendor (diffs stable, trees beta). Mitigation: both are

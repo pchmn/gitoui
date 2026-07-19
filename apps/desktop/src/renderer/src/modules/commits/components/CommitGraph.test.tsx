@@ -180,9 +180,9 @@ describe('CommitGraph ordering', () => {
   // The TanStack DB collection is keyed by `sha`, so without an explicit `orderBy` rows come out in
   // sha order, not `listCommits`'s order. The lane sweep (ADR 0007) requires strict
   // children-before-parents order, which `listCommits`'s `scope: 'allRefs'` walk already
-  // guarantees (topo order) — so the graph must render in the order the array came back in, not
-  // re-sort by `committedAt` (which the topo walk needn't match, e.g. across clock skew).
-  it('renders commits in listCommits order (topological), not by commit date', async () => {
+  // guarantees (`--date-order`) — so the graph must render in the order the array came back in, not
+  // re-sort by `committedAt` (which that walk needn't match, e.g. across clock skew).
+  it('renders commits in listCommits order (the git walk), not by commit date', async () => {
     const commits = [
       makeCommit({ sha: 'mid', subject: 'the middle one', committedAt: 2_000 }),
       makeCommit({ sha: 'old', subject: 'the oldest one', committedAt: 1_000 }),

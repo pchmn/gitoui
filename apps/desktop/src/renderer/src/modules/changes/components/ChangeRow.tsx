@@ -1,6 +1,7 @@
 import type { StatusChange } from '@gitoui/contracts/git';
 import { cn } from '@gitoui/ui/lib/utils';
 import { MinusIcon, PlusIcon } from '@phosphor-icons/react';
+import { FilePath } from '#renderer/shared/components/FilePath';
 import { messages } from '#renderer/shared/messages/messages';
 import { CHANGE_LETTER, CHANGE_LETTER_TONE } from './changeGlyph';
 
@@ -18,12 +19,16 @@ import { CHANGE_LETTER, CHANGE_LETTER_TONE } from './changeGlyph';
  * since nothing else competes for that space without the toggle.
  *
  * (A leading file-type icon lands with `@pierre/trees` later; omitted for now.)
+ *
+ * `onOpen` (issue #67) opens this row's Change in the Code & Diff view — the row itself is the
+ * click target; the stage/unstage action button stops propagation so it never also opens the diff.
  */
 export function ChangeRow({
   path,
   change,
   checked,
   onToggle,
+  onOpen,
 }: {
   path: string;
   change: StatusChange;
@@ -31,11 +36,11 @@ export function ChangeRow({
   checked?: boolean;
   /** Toggle staging for this path (stage when currently unchecked, unstage when checked). Omit for a read-only row (Commit detail). */
   onToggle?: () => void;
+  /** Open this row's diff in the Code & Diff view. Omit to keep the row inert. */
+  onOpen?: () => void;
 }) {
   const readOnly = onToggle === undefined;
-  const slash = path.lastIndexOf('/');
-  const dir = slash === -1 ? '' : path.slice(0, slash);
-  const name = slash === -1 ? path : path.slice(slash + 1);
+  const name = path.slice(path.lastIndexOf('/') + 1);
   const showAdditions = change.additions !== undefined && change.additions > 0;
   const showDeletions = change.deletions !== undefined && change.deletions > 0;
   const hasStats = showAdditions || showDeletions;
@@ -47,17 +52,17 @@ export function ChangeRow({
     <div
       role='option'
       tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(event) => {
+        if ((event.key === 'Enter' || event.key === ' ') && onOpen) {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
       className='group relative flex h-7 shrink-0 cursor-default select-none items-center gap-2 rounded-sm px-3 hover:bg-muted focus-within:bg-muted'
       title={path}
     >
-      {/* The filename owns the space: it never shrinks (only ellipsizing if it alone overruns the
-          row), while the Muted-Ink path gives way first — truncating, down to nothing if need be.
-          The `/` is pinned between. */}
-      <span className='flex min-w-0 flex-1 items-baseline overflow-hidden text-sm'>
-        {dir !== '' && <span className='min-w-0 shrink truncate text-muted-foreground'>{dir}</span>}
-        {dir !== '' && <span className='shrink-0 text-muted-foreground'>/</span>}
-        <span className='max-w-full shrink-0 truncate font-medium text-foreground'>{name}</span>
-      </span>
+      <FilePath path={path} className='flex-1 text-sm' />
 
       <span className='relative flex shrink-0 items-center'>
         {readOnly ? (
@@ -68,10 +73,12 @@ export function ChangeRow({
             </span>
           )
         ) : (
-          // Hover/focus cluster: stats + the stage/unstage action, absolutely placed just left of the
-          // status letter so they never shift the filename; the gradient goes solid before the digits
-          // so they read cleanly over the name's end.
-          <span className='pointer-events-none absolute inset-y-0 right-full flex items-center gap-2 bg-linear-to-r from-transparent to-muted to-40% pr-2 pl-10 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 motion-safe:transition-opacity motion-safe:duration-150'>
+          // Hover/keyboard cluster: stats + the stage/unstage action, absolutely placed just left of
+          // the status letter so they never shift the filename; the gradient goes solid before the
+          // digits so they read cleanly over the name's end. Revealed on hover and on KEYBOARD focus
+          // only (`focus-visible`) — a mouse click (which selects/opens the row) leaves it hidden so
+          // the selected filename stays fully readable, while Tab still surfaces it (row or button).
+          <span className='pointer-events-none absolute inset-y-0 right-full flex items-center gap-2 bg-linear-to-r from-transparent to-muted to-40% pr-2 pl-10 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-visible:pointer-events-auto group-focus-visible:opacity-100 group-has-[:focus-visible]:pointer-events-auto group-has-[:focus-visible]:opacity-100 motion-safe:transition-opacity motion-safe:duration-150'>
             {hasStats && (
               <span className='flex items-center gap-1.5 font-mono text-[0.625rem] tabular-nums'>
                 {showAdditions && <span className='text-git-added'>+{change.additions}</span>}
@@ -80,7 +87,10 @@ export function ChangeRow({
             )}
             <button
               type='button'
-              onClick={onToggle}
+              onClick={(event) => {
+                event.stopPropagation();
+                onToggle?.();
+              }}
               aria-label={actionLabel}
               className='flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40'
             >

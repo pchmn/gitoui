@@ -2,6 +2,7 @@ import type { CommitDetail as CommitDetailData } from '@gitoui/contracts/git';
 import { CheckIcon, CopyIcon } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { ChangeRow } from '#renderer/modules/changes/components/ChangeRow';
+import { useCenterView } from '#renderer/modules/diff/CenterViewContext';
 import { useActiveRepository } from '#renderer/modules/repository/ActiveRepositoryContext';
 import type { GitError } from '#renderer/shared/git/errors';
 import { messages } from '#renderer/shared/messages/messages';
@@ -86,6 +87,7 @@ export function CommitDetail({ sha }: { sha: string }) {
  * contract joins them with a blank line, git-convention), then the Changes list.
  */
 function CommitDetailBody({ data }: { data: CommitDetailData }) {
+  const { open: openDiff } = useCenterView();
   const newline = data.message.indexOf('\n');
   const subject = newline === -1 ? data.message : data.message.slice(0, newline);
   const body = newline === -1 ? '' : data.message.slice(newline).trimStart();
@@ -122,7 +124,14 @@ function CommitDetailBody({ data }: { data: CommitDetailData }) {
         className='flex min-h-0 flex-1 flex-col overflow-y-auto py-1'
       >
         {data.changes.map((change) => (
-          <ChangeRow key={change.path} path={change.path} change={change} />
+          <ChangeRow
+            key={change.path}
+            path={change.path}
+            change={change}
+            onOpen={() =>
+              openDiff({ path: change.path, source: { kind: 'commit', sha: data.sha } })
+            }
+          />
         ))}
       </div>
     </div>

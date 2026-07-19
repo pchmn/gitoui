@@ -1,6 +1,8 @@
 import { useLiveStatus } from '#renderer/modules/changes/hooks/useLiveStatus';
 import { CommitSelectionProvider } from '#renderer/modules/commits/CommitSelectionContext';
 import { CommitGraph } from '#renderer/modules/commits/components/CommitGraph';
+import { CenterViewProvider, useCenterView } from '#renderer/modules/diff/CenterViewContext';
+import { CodeDiffView } from '#renderer/modules/diff/components/CodeDiffView';
 import { useActiveRepository } from '#renderer/modules/repository/ActiveRepositoryContext';
 import { EmptyState } from '#renderer/modules/repository/components/EmptyState';
 import { useReopenLastRepository } from '#renderer/modules/repository/hooks/useReopenLastRepository';
@@ -31,18 +33,45 @@ export function AppShell() {
   return (
     <SelectionProvider>
       <CommitSelectionProvider>
-        <div className='flex h-screen flex-col bg-background text-foreground'>
-          <TopBar />
-          <div className='flex min-h-0 flex-1'>
-            {root !== null && <RepoRail />}
-            <main className='min-h-0 flex-1 overflow-auto'>
-              {root !== null ? <CommitGraph root={root} /> : isRestoring ? null : <EmptyState />}
-            </main>
-            {root !== null && <Inspector />}
+        <CenterViewProvider>
+          <div className='flex h-screen flex-col bg-background text-foreground'>
+            <TopBar />
+            <ShellBody root={root} isRestoring={isRestoring} />
+            <StatusBar />
           </div>
-          <StatusBar />
-        </div>
+        </CenterViewProvider>
       </CommitSelectionProvider>
     </SelectionProvider>
+  );
+}
+
+/**
+ * The flex-row body (rail + center + right Inspector). The Code & Diff view (issue #67) replaces the
+ * Commit graph in the center while a file is targeted (`CenterViewContext`) AND takes over the left
+ * rail's space — the rail unmounts so the diff gets the full width up to the Inspector, which stays
+ * (it holds the Changes list you navigate between files with). `CommitGraph` also UNMOUNTS while the
+ * diff is open — its own Esc handler isn't attached then, so a second Esc only fires once the graph
+ * is back (see `CodeDiffView`'s comment on the capture-phase handoff).
+ */
+function ShellBody({ root, isRestoring }: { root: string | null; isRestoring: boolean }) {
+  const { file } = useCenterView();
+  const diffOpen = root !== null && file !== null;
+
+  return (
+    <div className='flex min-h-0 flex-1'>
+      {root !== null && !diffOpen && <RepoRail />}
+      <main className='min-h-0 flex-1 overflow-auto'>
+        {root !== null ? (
+          diffOpen ? (
+            <CodeDiffView />
+          ) : (
+            <CommitGraph root={root} />
+          )
+        ) : isRestoring ? null : (
+          <EmptyState />
+        )}
+      </main>
+      {root !== null && <Inspector />}
+    </div>
   );
 }

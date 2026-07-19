@@ -28,6 +28,7 @@
     "@gitoui/core": "workspace:*",
     "@gitoui/ui": "workspace:*",
     "@phosphor-icons/react": "catalog:",
+    "@pierre/diffs": "^1.2.12",
     "@tanstack/query-db-collection": "catalog:",
     "@tanstack/react-db": "catalog:",
     "@tanstack/react-query": "catalog:",
