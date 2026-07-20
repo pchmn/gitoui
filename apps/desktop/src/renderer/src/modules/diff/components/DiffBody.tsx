@@ -24,12 +24,18 @@ import {
 import { diffQueryOptions } from '../hooks/useDiff';
 
 /**
- * Match the diff surface to the app canvas. `@pierre/diffs` renders inside a shadow root and paints
- * every surface tone (bg, gutter, context, separators) from `--diffs-bg`, so an inline style on the
- * host — which outranks the library's own layered `:host` theme rule — is the override point.
+ * Match the diff surface to the app canvas. `@pierre/diffs` renders inside a shadow root; an inline
+ * style on the host outranks the library's own `:host` theme rule, so it's the override point.
  * `--background` already flips with the app's `.dark` class, so one value serves light and dark.
+ *
+ * The library derives its context/separator/buffer tones by mixing `--diffs-bg` toward
+ * `--diffs-mixer`, whose `#000`/`#fff` default greys them out against our warm canvas; pointing it
+ * at `--foreground` keeps that tonal step but on the palette's hue, so the whole surface reads warm.
  */
-const DIFF_SURFACE_STYLE = { '--diffs-bg': 'var(--background)' } as CSSProperties;
+const DIFF_SURFACE_STYLE = {
+  '--diffs-bg': 'var(--background)',
+  '--diffs-mixer': 'var(--foreground)',
+} as CSSProperties;
 
 /**
  * The wrapper around `@pierre/diffs` (ADR 0008; issue #67) — the ONLY place the library is imported,
