@@ -175,7 +175,7 @@ describe('Code & Diff view wiring', () => {
     expect((await screen.findByTestId('diff-body')).getAttribute('data-diffstyle')).toBe('unified');
 
     await act(async () => {
-      screen.getByRole('button', { name: 'Split layout' }).click();
+      screen.getByRole('tab', { name: 'Split layout' }).click();
     });
 
     expect((await screen.findByTestId('diff-body')).getAttribute('data-diffstyle')).toBe('split');

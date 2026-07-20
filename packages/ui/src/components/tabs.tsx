@@ -1,47 +1,85 @@
 import { Tabs as TabsPrimitive } from '@base-ui/react/tabs';
+import { cva } from 'class-variance-authority';
+import { createContext, useContext } from 'react';
 import { cn } from '#lib/utils';
 
 /**
- * Base UI tabs styled per DESIGN.md's navigation rules: an underline `primary` active state that
- * tracks the selected tab via `TabsIndicator`'s `--active-tab-left` / `--active-tab-width` CSS
- * vars — never a boxed/pill active state. Serves Changes ⇄ Tree and Diff | File.
+ * Base UI tabs, two visual variants (DESIGN.md §Navigation — the same "Tabs" family covers Changes ⇄
+ * Tree, Diff | File, Unified | Split):
+ * - `underline` (default): a `primary` underline that tracks the active tab via `TabsIndicator`'s
+ *   `--active-tab-left` / `--active-tab-width` CSS vars.
+ * - `segmented`: a compact bordered group with a filled active segment — no `TabsIndicator`. Suits a
+ *   display toggle (e.g. Unified | Split) where the tabs sit inline next to other controls.
+ *
+ * `variant` is set on `TabsRoot` and reaches `TabsList` / `TabsTab` through context.
  *
  * Usage:
- *   <Tabs.Root defaultValue='changes'>
- *     <Tabs.List>
- *       <Tabs.Tab value='changes'>Changes</Tabs.Tab>
- *       <Tabs.Tab value='tree'>Tree</Tabs.Tab>
- *       <Tabs.Indicator />
- *     </Tabs.List>
- *     <Tabs.Panel value='changes'>...</Tabs.Panel>
- *     <Tabs.Panel value='tree'>...</Tabs.Panel>
- *   </Tabs.Root>
+ *   <TabsRoot defaultValue='changes'>
+ *     <TabsList>
+ *       <TabsTab value='changes'>Changes</TabsTab>
+ *       <TabsTab value='tree'>Tree</TabsTab>
+ *       <TabsIndicator />
+ *     </TabsList>
+ *     <TabsPanel value='changes'>...</TabsPanel>
+ *   </TabsRoot>
  */
 
-function TabsRoot({ className, ...props }: TabsPrimitive.Root.Props) {
+type TabsVariant = 'underline' | 'segmented';
+
+const TabsVariantContext = createContext<TabsVariant>('underline');
+
+const tabsListVariants = cva('flex items-center', {
+  variants: {
+    variant: {
+      underline: 'relative gap-1 border-b border-border',
+      segmented: 'gap-0.5 rounded-md border border-border p-0.5',
+    },
+  },
+});
+
+const tabsTabVariants = cva(
+  'flex shrink-0 cursor-pointer items-center justify-center whitespace-nowrap font-medium text-muted-foreground outline-none transition-colors select-none hover:text-foreground disabled:pointer-events-none disabled:opacity-50 data-[active]:text-foreground',
+  {
+    variants: {
+      variant: {
+        underline:
+          'relative h-7 px-2.5 text-xs/relaxed focus-visible:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30',
+        segmented:
+          'h-6 gap-1 rounded-sm px-2 text-xs/relaxed focus-visible:ring-2 focus-visible:ring-ring/40 data-[active]:bg-muted',
+      },
+    },
+  },
+);
+
+function TabsRoot({
+  className,
+  variant = 'underline',
+  ...props
+}: TabsPrimitive.Root.Props & { variant?: TabsVariant }) {
   return (
-    <TabsPrimitive.Root data-slot='tabs' className={cn('flex flex-col', className)} {...props} />
+    <TabsVariantContext.Provider value={variant}>
+      <TabsPrimitive.Root data-slot='tabs' className={cn('flex flex-col', className)} {...props} />
+    </TabsVariantContext.Provider>
   );
 }
 
 function TabsList({ className, ...props }: TabsPrimitive.List.Props) {
+  const variant = useContext(TabsVariantContext);
   return (
     <TabsPrimitive.List
       data-slot='tabs-list'
-      className={cn('relative flex items-center gap-1 border-b border-border', className)}
+      className={cn(tabsListVariants({ variant }), className)}
       {...props}
     />
   );
 }
 
 function TabsTab({ className, ...props }: TabsPrimitive.Tab.Props) {
+  const variant = useContext(TabsVariantContext);
   return (
     <TabsPrimitive.Tab
       data-slot='tabs-tab'
-      className={cn(
-        'relative flex h-7 shrink-0 cursor-default items-center justify-center px-2.5 text-xs/relaxed font-medium whitespace-nowrap text-muted-foreground outline-none transition-colors select-none hover:text-foreground focus-visible:text-foreground focus-visible:ring-2 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:opacity-50 data-[active]:text-foreground',
-        className,
-      )}
+      className={cn(tabsTabVariants({ variant }), className)}
       {...props}
     />
   );
