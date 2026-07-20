@@ -377,11 +377,17 @@ persisted across sessions. Min/max keep either side from crowding out the graph.
   recency and working-tree state (a quiet dot for clean / dirty). No color beyond state.
 
 ### Ref pills
-- Branch / tag markers as small `rounded-sm` Micro-text pills on Accent Surface; the active branch
-  and Detached HEAD take a stronger tint. Tiny, quiet, scannable. Fills are always
-  opaque (the strong tint is pre-mixed over the canvas, not a translucent primary): in the graph,
-  hovering a row extends its pills over the lane lines, and a see-through pill would let the
-  lines bleed into the text.
+- Branch / tag markers as small `rounded-sm` Micro-text pills. In the graph, a **Branch /
+  remote-tracking Branch / Detached HEAD pill wears its row's lane color** (an opaque tint over the
+  canvas, its ink-anchored text a deepened shade of the same hue) so a name reads as belonging to
+  its line at a glance — the association the colored lanes exist for, spent where color is spent
+  (the graph, per the Spent Color Rule). *Emphasis* sets how loud the tint is, not its hue: the
+  active Branch and Detached HEAD read **stronger**, remote-tracking Branches **quieter**, other
+  local Branches in between. A **Tag carries no tint** (it marks a point on a line, not a line) and
+  falls back to the neutral Accent / Muted Surface pill. Tiny, quiet, scannable. Fills are always
+  opaque (the tint is pre-mixed over the canvas, never a translucent lane color): hovering a row
+  extends its pills over the lane lines, and a see-through pill would let the lines bleed into the
+  text.
 
 ### Toasts
 The app's transient feedback / error surface, stacked bottom-right. A true overlay, so it earns the

@@ -668,6 +668,7 @@ export function CommitGraph({ root }: { root: string }) {
                   <RefPill
                     key={`${ref._tag}:${refLabel(ref)}`}
                     emphasis={refEmphasis(ref)}
+                    tint={refTint(ref, layoutRow.col)}
                     className='min-w-0 shrink group-hover/refs:shrink-0 group-hover/refs:max-w-none'
                   >
                     {refLabel(ref)}
@@ -678,7 +679,8 @@ export function CommitGraph({ root }: { root: string }) {
                     through the name being read. */}
                 {ghostLabel !== null && (
                   <RefPill
-                    emphasis='strong'
+                    emphasis='default'
+                    tint={laneColor(layoutRow.col)}
                     className='hidden min-w-0 shrink opacity-60 group-hover:inline-block group-hover/refs:shrink-0 group-hover/refs:max-w-none group-hover/refs:opacity-100'
                   >
                     {ghostLabel}
@@ -1099,6 +1101,15 @@ function refEmphasis(ref: Ref): 'strong' | 'default' | 'quiet' {
     case 'Tag':
       return 'quiet';
   }
+}
+
+/**
+ * DESIGN §Ref pills: a Branch / remote-tracking Branch / Detached HEAD wears its row's lane color,
+ * so a name reads as belonging to its line at a glance. A Tag marks a point on a line, not a line —
+ * it stays the neutral pill (no tint).
+ */
+function refTint(ref: Ref, col: number): string | undefined {
+  return ref._tag === 'Tag' ? undefined : laneColor(col);
 }
 
 /** Skeleton rows shown during loading (no spinner — skeletons over spinners per the rail convention). */
