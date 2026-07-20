@@ -55,6 +55,11 @@ catalogs:
 overrides:
   '@tanstack/db': 0.6.13
 
+patchedDependencies:
+  '@pierre/diffs@1.2.12':
+    hash: 47ee508083fa2c55c5e51c2b3c0c3710a79f67aa031cedffe9752f1146040c45
+    path: patches/@pierre__diffs@1.2.12.patch
+
 importers:
 
   .:
@@ -100,7 +105,7 @@ importers:
         version: 2.1.10(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@pierre/diffs':
         specifier: ^1.2.12
-        version: 1.2.12(@shikijs/themes@4.3.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+        version: 1.2.12(patch_hash=47ee508083fa2c55c5e51c2b3c0c3710a79f67aa031cedffe9752f1146040c45)(@shikijs/themes@4.3.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@tanstack/query-db-collection':
         specifier: 'catalog:'
         version: 1.0.45(@tanstack/query-core@5.101.0)(typescript@6.0.3)
@@ -5680,7 +5685,7 @@ snapshots:
 
   '@phun-ky/typeof@2.0.3': {}
 
-  '@pierre/diffs@1.2.12(@shikijs/themes@4.3.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
+  '@pierre/diffs@1.2.12(patch_hash=47ee508083fa2c55c5e51c2b3c0c3710a79f67aa031cedffe9752f1146040c45)(@shikijs/themes@4.3.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@pierre/theme': 1.1.0
       '@pierre/theming': 0.0.2(@pierre/theme@1.1.0)(@shikijs/themes@4.3.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(shiki@4.3.1)

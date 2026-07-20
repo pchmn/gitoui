@@ -33,6 +33,9 @@
     ],
     "overrides": {
       "@tanstack/db": "0.6.13"
+    },
+    "patchedDependencies": {
+      "@pierre/diffs@1.2.12": "patches/@pierre__diffs@1.2.12.patch"
     }
   }
 }

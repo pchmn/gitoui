@@ -8,6 +8,14 @@ import { useQuery } from '@tanstack/react-query';
  */
 export const diffKey = (repoPath: string) => ['diff', repoPath] as const;
 
+/** Shared query options — used by `useDiff` and by `useDiffPrimer`'s hover prefetch. */
+export function diffQueryOptions(repoPath: string, path: string, source: DiffSource) {
+  return {
+    queryKey: [...diffKey(repoPath), path, source] as const,
+    queryFn: () => window.git.diff({ repoPath, path, source }),
+  };
+}
+
 /**
  * Fetch one path's diff (issue #67): plain `useQuery` wrapping `window.git.diff`, like
  * `useCommitDetail` — no collection, no subscription. Disabled until a Repository is open and a
@@ -16,7 +24,7 @@ export const diffKey = (repoPath: string) => ['diff', repoPath] as const;
 export function useDiff(repoPath: string | null, path: string | null, source: DiffSource | null) {
   const enabled = repoPath !== null && path !== null && source !== null;
   return useQuery({
-    queryKey: enabled ? [...diffKey(repoPath), path, source] : ['diff', null],
+    queryKey: enabled ? diffQueryOptions(repoPath, path, source).queryKey : ['diff', null],
     // Casts guarded by `enabled` — mirrors `useCommitDetail`'s identical seam.
     queryFn: () =>
       window.git.diff({

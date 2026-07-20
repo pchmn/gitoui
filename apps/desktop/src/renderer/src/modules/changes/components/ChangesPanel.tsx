@@ -8,6 +8,7 @@ import {
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { useCenterView } from '#renderer/modules/diff/CenterViewContext';
+import { useDiffPrimer } from '#renderer/modules/diff/components/DiffBody';
 import type { GitError } from '#renderer/shared/git/errors';
 import { messages } from '#renderer/shared/messages/messages';
 import { matchError } from '#renderer/shared/utils/matchError';
@@ -45,6 +46,7 @@ export function ChangesPanel() {
   const { data: status, isLoading, isError, error, retry } = useStatus(root);
   const { stageFile, unstageFile, stageAll, unstageAll } = useStaging();
   const { open: openDiff, file: openFile } = useCenterView();
+  const primeDiff = useDiffPrimer(root);
 
   // Staging folds a path's change onto the other axis (Unstaged→Staged, the reverse for unstaging),
   // emptying the axis the Code & Diff view was reading. If the open file crosses over, re-target it
@@ -134,6 +136,7 @@ export function ChangesPanel() {
                 followOpenFile('staged', row.path);
               }}
               onOpen={() => openDiff({ path: row.path, source: { kind: 'unstaged' } })}
+              onPrefetch={() => primeDiff(row.path, { kind: 'unstaged' })}
             />
           ))}
         </ChangeGroup>
@@ -163,6 +166,7 @@ export function ChangesPanel() {
                 followOpenFile('unstaged', row.path);
               }}
               onOpen={() => openDiff({ path: row.path, source: { kind: 'staged' } })}
+              onPrefetch={() => primeDiff(row.path, { kind: 'staged' })}
             />
           ))}
         </ChangeGroup>

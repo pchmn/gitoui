@@ -1,0 +1,17 @@
+diff --git a/dist/renderers/DiffHunksRenderer.js b/dist/renderers/DiffHunksRenderer.js
+index d1a34789994239239a0e3ff751292ac34a21e44a..872c32fa14aceadd25ac8f30c1c84d5feaf0e6ed 100644
+--- a/dist/renderers/DiffHunksRenderer.js
++++ b/dist/renderers/DiffHunksRenderer.js
+@@ -152,7 +152,11 @@ var DiffHunksRenderer = class {
+ 		if (cache != null && !areDiffRenderOptionsEqual(options, cache.options)) cache = void 0;
+ 		this.renderCache ??= {
+ 			diff,
+-			highlighted: !massiveDiff && !isDiffPlainText(diff),
++			// PATCHED (gitoui): only claim `highlighted` when a highlighted result actually exists.
++			// Otherwise a hydrate that adopts already-painted DOM (React StrictMode's double-mount)
++			// records `highlighted: true` with `result: undefined`, and the worker pool's later
++			// response computes `triggerRenderUpdate = false` — the diff stays unhighlighted.
++			highlighted: cache?.result != null && !massiveDiff && !isDiffPlainText(diff),
+ 			options,
+ 			result: massiveDiff ? void 0 : cache?.result,
+ 			renderRange: void 0

@@ -22,6 +22,8 @@ vi.mock('./DiffBody', () => ({
   DiffBody: ({ path, diffStyle }: { path: string; diffStyle: string }) => (
     <pre data-testid='diff-body' data-diffstyle={diffStyle} data-path={path} />
   ),
+  // ChangesPanel pulls the hover-prefetch primer from the same module — inert here.
+  useDiffPrimer: () => () => {},
 }));
 
 afterEach(() => {

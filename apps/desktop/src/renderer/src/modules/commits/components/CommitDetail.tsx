@@ -3,6 +3,7 @@ import { CheckIcon, CopyIcon } from '@phosphor-icons/react';
 import { useState } from 'react';
 import { ChangeRow } from '#renderer/modules/changes/components/ChangeRow';
 import { useCenterView } from '#renderer/modules/diff/CenterViewContext';
+import { useDiffPrimer } from '#renderer/modules/diff/components/DiffBody';
 import { useActiveRepository } from '#renderer/modules/repository/ActiveRepositoryContext';
 import type { GitError } from '#renderer/shared/git/errors';
 import { messages } from '#renderer/shared/messages/messages';
@@ -87,7 +88,9 @@ export function CommitDetail({ sha }: { sha: string }) {
  * contract joins them with a blank line, git-convention), then the Changes list.
  */
 function CommitDetailBody({ data }: { data: CommitDetailData }) {
+  const { root } = useActiveRepository();
   const { open: openDiff } = useCenterView();
+  const primeDiff = useDiffPrimer(root);
   const newline = data.message.indexOf('\n');
   const subject = newline === -1 ? data.message : data.message.slice(0, newline);
   const body = newline === -1 ? '' : data.message.slice(newline).trimStart();
@@ -131,6 +134,7 @@ function CommitDetailBody({ data }: { data: CommitDetailData }) {
             onOpen={() =>
               openDiff({ path: change.path, source: { kind: 'commit', sha: data.sha } })
             }
+            onPrefetch={() => primeDiff(change.path, { kind: 'commit', sha: data.sha })}
           />
         ))}
       </div>

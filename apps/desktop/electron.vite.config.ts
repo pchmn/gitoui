@@ -21,5 +21,8 @@ export default defineConfig({
   },
   renderer: {
     plugins: [react(), tailwindcss()],
+    // The @pierre/diffs highlight worker code-splits (dynamic grammar imports), which the default
+    // iife worker output can't express — Electron's Chromium handles module workers fine.
+    worker: { format: 'es' },
   },
 });

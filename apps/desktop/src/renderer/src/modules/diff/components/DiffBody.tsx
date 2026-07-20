@@ -1,3 +1,4 @@
+import type { DiffSource } from '@gitoui/contracts/git';
 import {
   areLanguagesAttached,
   areThemesAttached,
@@ -7,9 +8,13 @@ import {
   getSharedHighlighter,
   isHighlighterLoaded,
   parseDiffFromFile,
+  type SupportedLanguages,
 } from '@pierre/diffs';
-import { FileDiff } from '@pierre/diffs/react';
-import { useEffect, useMemo, useState } from 'react';
+import { FileDiff, useWorkerPool, WorkerPoolContextProvider } from '@pierre/diffs/react';
+import DiffsHighlightWorker from '@pierre/diffs/worker/worker.js?worker';
+import { useQueryClient } from '@tanstack/react-query';
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import { diffQueryOptions } from '../hooks/useDiff';
 
 /**
  * The wrapper around `@pierre/diffs` (ADR 0008; issue #67) — the ONLY place the library is imported,
@@ -29,11 +34,16 @@ import { useEffect, useMemo, useState } from 'react';
  * The default theme is `themeType: 'system'` — it follows the CSS `color-scheme`, which our scoped
  * rule in globals.css maps to the app's `.dark` class so light/dark tracks the app, not the OS.
  *
- * `disableWorkerPool`: the highlighter runs on the main thread. With no worker to fall back on, the
- * library's FIRST synchronous render produces nothing until Shiki (theme + this file's grammar) has
- * loaded — it then self-heals via an async re-render that is unreliable under StrictMode (blank pane
- * until the next render). So we PRELOAD the highlighter and gate `FileDiff` on readiness: it mounts
- * only once the highlighter can paint synchronously, making the first frame deterministic.
+ * Highlighting runs on the library's worker pool (`DiffWorkerPool`): with a working pool the first
+ * render paints PLAIN text synchronously and Shiki colors stream in from the workers, so opening a
+ * diff never blocks the UI thread on tokenizing a whole file. The main-thread path (the shared
+ * highlighter, preloaded and gated so the first frame is deterministic — its async self-heal is
+ * unreliable under StrictMode) survives as the fallback when the pool is absent or its workers
+ * failed to spawn.
+ *
+ * The library is patched (`patches/@pierre__diffs@1.2.12.patch`): under StrictMode's double-mount
+ * the worker response never triggered a repaint, leaving every first open unhighlighted in dev.
+ * See ADR 0008's consequences for the full story; re-check the patch on upgrades.
  */
 export function DiffBody({
   path,
@@ -49,38 +59,176 @@ export function DiffBody({
   diffStyle: 'unified' | 'split';
 }) {
   const fileDiff = useMemo(
-    () =>
-      parseDiffFromFile(
-        { name: oldPath ?? path, contents: oldContent ?? '' },
-        { name: path, contents: newContent ?? '' },
-      ),
+    () => parseDiffForHighlight(path, oldPath, oldContent, newContent),
     [path, oldPath, oldContent, newContent],
   );
 
-  const ready = useHighlighterReady(fileDiff.lang ?? getFiletypeFromFileName(path));
-  if (!ready) return <DiffBodyPending />;
+  const pool = useWorkerPoolState();
+  const highlighterReady = useHighlighterReady(
+    fileDiff.lang ?? getFiletypeFromFileName(path),
+    pool === 'unavailable',
+  );
+  if (pool === 'warming' || (pool === 'unavailable' && !highlighterReady))
+    return <DiffBodyPending />;
 
   return (
     <FileDiff
       fileDiff={fileDiff}
-      disableWorkerPool
+      disableWorkerPool={pool === 'unavailable'}
       options={{ diffStyle, diffIndicators: 'classic', disableFileHeader: true }}
     />
   );
 }
 
 /**
- * True once the shared highlighter can paint `lang` synchronously (instance + theme + grammar all
- * loaded); otherwise kicks off the load and re-evaluates when it resolves. Computed from live module
- * state every render so switching to a not-yet-loaded language re-gates correctly.
+ * Parse a diff for the highlighter, keyed for the pool's result cache. The `cacheKey` is derived
+ * from name + a content hash (NOT path + source: working-tree contents mutate under a stable path,
+ * and the library serves cache hits by key alone). Must stay the single parse used by BOTH the
+ * primer and `DiffBody`, so a primed result is found again at open time.
  */
-function useHighlighterReady(lang: string): boolean {
+function parseDiffForHighlight(
+  path: string,
+  oldPath: string | undefined,
+  oldContent: string | null,
+  newContent: string | null,
+) {
+  const oldName = oldPath ?? path;
+  return parseDiffFromFile(
+    {
+      name: oldName,
+      contents: oldContent ?? '',
+      cacheKey: `${oldName}:${fnv1a(oldContent ?? '')}`,
+    },
+    { name: path, contents: newContent ?? '', cacheKey: `${path}:${fnv1a(newContent ?? '')}` },
+  );
+}
+
+/** FNV-1a 32-bit — cheap, stable content hash for the highlight cache key. */
+function fnv1a(text: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+/**
+ * Pre-highlight one file's diff so opening it paints colorized on the FIRST frame (no plain-text
+ * flash): prefetches the same diff query the view will mount with, then hands the parsed diff to
+ * the pool's prime cache. Fired from list-row hover/focus — both are throttled naturally (the
+ * query result stays fresh 15s; the pool dedupes primes by cacheKey). No-op without a warm pool.
+ */
+export function useDiffPrimer(repoPath: string | null) {
+  const pool = useWorkerPool();
+  const queryClient = useQueryClient();
+  return useCallback(
+    (path: string, source: DiffSource) => {
+      if (repoPath === null || pool == null || !pool.isInitialized()) return;
+      queryClient
+        .fetchQuery({ ...diffQueryOptions(repoPath, path, source), staleTime: 15_000 })
+        .then((diff) => {
+          if (diff.binary) return;
+          pool.primeDiffHighlightCache(
+            parseDiffForHighlight(path, diff.oldPath, diff.oldContent, diff.newContent),
+          );
+        })
+        // Priming is best-effort — the real open surfaces any error itself.
+        .catch(() => {});
+    },
+    [repoPath, pool, queryClient],
+  );
+}
+
+/**
+ * Hosts the library's highlight worker pool. Mounted once in `AppShell` — NOT per diff view — so
+ * the workers warm up at launch (ahead of the first diff) and survive closing the view: the
+ * provider terminates the pool when it unmounts. Two workers are plenty for a one-file-at-a-time
+ * view; the library's default of 8 targets PR-style multi-file pages.
+ */
+export function DiffWorkerPool({ children }: { children: ReactNode }) {
+  return (
+    <WorkerPoolContextProvider
+      poolOptions={{ workerFactory: () => new DiffsHighlightWorker(), poolSize: 2 }}
+      highlighterOptions={{}}
+    >
+      <WarmWorkerPool />
+      {children}
+    </WorkerPoolContextProvider>
+  );
+}
+
+/**
+ * Grammars resolved into the workers at warm-up: first open of a file in these languages skips the
+ * async grammar resolution, shrinking the plain-text flash to the worker round trip. Any other
+ * language still works — its grammar just resolves on first use.
+ */
+const WARM_LANGUAGES = [
+  'typescript',
+  'tsx',
+  'javascript',
+  'jsx',
+  'json',
+  'markdown',
+  'css',
+  'html',
+  'yaml',
+] satisfies SupportedLanguages[];
+
+/** Kicks off pool initialization at mount; a failure is not fatal (DiffBody falls back). */
+function WarmWorkerPool() {
+  const pool = useWorkerPool();
+  useEffect(() => {
+    pool?.initialize(WARM_LANGUAGES).catch(() => {});
+  }, [pool]);
+  return null;
+}
+
+/**
+ * 'ready' once the pool can serve renders; 'warming' while it initializes (brief — it warms at app
+ * launch); 'unavailable' when there is no provider above or the workers failed to spawn, in which
+ * case `DiffBody` falls back to the gated main-thread highlighter.
+ */
+function useWorkerPoolState(): 'ready' | 'warming' | 'unavailable' {
+  const pool = useWorkerPool();
+  const initialized = pool?.isInitialized() ?? false;
+  const [failed, setFailed] = useState(false);
+  const [, reevaluate] = useState(0);
+
+  useEffect(() => {
+    if (pool == null || initialized) return;
+    let cancelled = false;
+    // Idempotent — shares the in-flight promise with `WarmWorkerPool` (and retries a failed init).
+    pool.initialize().then(
+      () => {
+        if (!cancelled) reevaluate((n) => n + 1);
+      },
+      () => {
+        if (!cancelled) setFailed(true);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [pool, initialized]);
+
+  if (pool == null || failed) return 'unavailable';
+  return initialized ? 'ready' : 'warming';
+}
+
+/**
+ * True once the shared MAIN-THREAD highlighter can paint `lang` synchronously (instance + theme +
+ * grammar all loaded); otherwise kicks off the load and re-evaluates when it resolves. Computed from
+ * live module state every render so switching to a not-yet-loaded language re-gates correctly.
+ * Only loads when `enabled` — it is the fallback for a missing/failed worker pool.
+ */
+function useHighlighterReady(lang: string, enabled: boolean): boolean {
   const ready =
     isHighlighterLoaded() && areThemesAttached(DEFAULT_THEMES) && areLanguagesAttached(lang);
   const [, reevaluate] = useState(0);
 
   useEffect(() => {
-    if (ready) return;
+    if (!enabled || ready) return;
     let cancelled = false;
     getSharedHighlighter(getHighlighterOptions(lang, {})).then(
       () => {
@@ -92,7 +240,7 @@ function useHighlighterReady(lang: string): boolean {
     return () => {
       cancelled = true;
     };
-  }, [ready, lang]);
+  }, [enabled, ready, lang]);
 
   return ready;
 }

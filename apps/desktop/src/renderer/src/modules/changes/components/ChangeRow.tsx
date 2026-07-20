@@ -29,6 +29,7 @@ export function ChangeRow({
   checked,
   onToggle,
   onOpen,
+  onPrefetch,
 }: {
   path: string;
   change: StatusChange;
@@ -38,6 +39,8 @@ export function ChangeRow({
   onToggle?: () => void;
   /** Open this row's diff in the Code & Diff view. Omit to keep the row inert. */
   onOpen?: () => void;
+  /** Warm this row's diff (data + highlight) ahead of an open — fired on hover/focus. */
+  onPrefetch?: () => void;
 }) {
   const readOnly = onToggle === undefined;
   const name = path.slice(path.lastIndexOf('/') + 1);
@@ -53,6 +56,8 @@ export function ChangeRow({
       role='option'
       tabIndex={0}
       onClick={onOpen}
+      onMouseEnter={onPrefetch}
+      onFocus={onPrefetch}
       onKeyDown={(event) => {
         if ((event.key === 'Enter' || event.key === ' ') && onOpen) {
           event.preventDefault();
