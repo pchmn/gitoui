@@ -13,8 +13,23 @@ import {
 import { FileDiff, useWorkerPool, WorkerPoolContextProvider } from '@pierre/diffs/react';
 import DiffsHighlightWorker from '@pierre/diffs/worker/worker.js?worker';
 import { useQueryClient } from '@tanstack/react-query';
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  type CSSProperties,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import { diffQueryOptions } from '../hooks/useDiff';
+
+/**
+ * Match the diff surface to the app canvas. `@pierre/diffs` renders inside a shadow root and paints
+ * every surface tone (bg, gutter, context, separators) from `--diffs-bg`, so an inline style on the
+ * host — which outranks the library's own layered `:host` theme rule — is the override point.
+ * `--background` already flips with the app's `.dark` class, so one value serves light and dark.
+ */
+const DIFF_SURFACE_STYLE = { '--diffs-bg': 'var(--background)' } as CSSProperties;
 
 /**
  * The wrapper around `@pierre/diffs` (ADR 0008; issue #67) — the ONLY place the library is imported,
@@ -26,10 +41,12 @@ import { diffQueryOptions } from '../hooks/useDiff';
  * contract ships `oldContent`/`newContent` for exactly this (see its doc comment). Trade-off: the
  * hunks are the library's recomputation of the diff, not git's own patch hunks.
  *
- * Uses the library's DEFAULT theme (`pierre-light`/`pierre-dark`); plating our OKLCH tokens onto it
- * is a deliberate second step (see globals.css note). `diffIndicators: 'classic'` = the `+`/`−`
- * gutter (DESIGN.md §5), colored from the default theme's own add/delete bases. `disableFileHeader`
- * drops the library's own filename bar — `CodeDiffView` already renders the header (path + stats).
+ * Uses the library's DEFAULT theme (`pierre-light`/`pierre-dark`) for syntax + add/delete tints;
+ * plating the rest of our OKLCH tokens onto it is a deliberate second step (see globals.css note).
+ * The one token already plated is the surface background (`DIFF_SURFACE_STYLE`), so the diff sits
+ * flush on the app canvas. `diffIndicators: 'classic'` = the `+`/`−` gutter (DESIGN.md §5), colored
+ * from the default theme's own add/delete bases. `disableFileHeader` drops the library's own
+ * filename bar — `CodeDiffView` already renders the header (path + stats).
  *
  * The default theme is `themeType: 'system'` — it follows the CSS `color-scheme`, which our scoped
  * rule in globals.css maps to the app's `.dark` class so light/dark tracks the app, not the OS.
@@ -76,6 +93,7 @@ export function DiffBody({
       fileDiff={fileDiff}
       disableWorkerPool={pool === 'unavailable'}
       options={{ diffStyle, diffIndicators: 'classic', disableFileHeader: true }}
+      style={DIFF_SURFACE_STYLE}
     />
   );
 }
