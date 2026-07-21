@@ -127,6 +127,13 @@ export function registerIpc(): void {
     ),
   );
 
+  makeIpcMethod(CHANNELS.git.diff, gitContract.diff, (payload) =>
+    GitClient.pipe(
+      Effect.flatMap((git) => git.diff(payload.repoPath, payload.path, payload.source)),
+      Effect.provide(GitClient.Default),
+    ),
+  );
+
   // --- window.desktop.* — backed directly by Electron APIs, never by core ---
   makeIpcMethod(CHANNELS.desktop.pickRepository, desktopContract.pickRepository, () =>
     Effect.promise(async () => {

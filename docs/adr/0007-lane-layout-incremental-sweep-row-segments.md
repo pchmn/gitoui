@@ -74,3 +74,21 @@ already-emitted row, so the `pendingAbove` carry disappears from the `Frontier` 
 never mutates a previous page. `LayoutRow` gained `lineAbove`/`lineBelow` (does the own column
 connect straight up/down?) so tips carry no stub above the node, roots none below, and the node
 sits in a small clearance gap that keeps it legible over any row background.
+
+## Amendment: `--date-order`, not `--topo-order` (chronological reading)
+
+The original Consequences said `scope: 'allRefs'` **implies `--topo-order`**. That conflated two
+distinct git orderings. The sweep's real requirement is only *children before parents*, and
+`--date-order` guarantees exactly that (git: "Show no parents before all of its children are shown,
+but otherwise show commits in the commit timestamp order") — the same guarantee `--topo-order`
+gives. The clock-skew hazard belongs to git's **bare default** order (no flag), not to
+`--date-order`.
+
+The difference between the two is only branch intermixing. `--topo-order` keeps each branch's
+commits contiguous, which makes the graph read as *grouped by branch* — commit dates jump around a
+column, obscuring "what happened when". `--date-order` walks in true commit-date order across all
+refs, so the timeline reads top-to-bottom (the GitKraken/Fork/gitk default). We switched to
+`--date-order`. The honest cost: interleaved branches keep more lanes open at once, so the graph is
+somewhat wider — accepted, since a chronological read is the point of the graph (PRODUCT.md: the
+graph is the protagonist). A user-facing topo/date toggle is the natural follow-up if branch-line
+coherence is later wanted.

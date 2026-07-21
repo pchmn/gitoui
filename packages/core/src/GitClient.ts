@@ -1,3 +1,5 @@
+import { readFile, stat } from 'node:fs/promises';
+import { join } from 'node:path';
 import type {
   Branch,
   BranchList,
@@ -5,6 +7,8 @@ import type {
   ChangeKind,
   Commit,
   CommitDetail,
+  Diff,
+  DiffSource,
   Ref,
   Remote,
   RemoteList,
@@ -18,6 +22,7 @@ import type {
 } from '@gitoui/contracts/git';
 import {
   BranchExistsError,
+  FileTooLargeError,
   GitCommandError,
   InvalidBranchNameError,
   NotARepositoryError,
@@ -25,6 +30,7 @@ import {
   UncommittedChangesError,
 } from '@gitoui/contracts/git';
 import { Effect } from 'effect';
+import type { SimpleGit } from 'simple-git';
 import { withGit } from './runGit.ts';
 
 /**
@@ -516,6 +522,86 @@ export function parseDiffTreeNameStatus(
 }
 
 /**
+ * True when a patch is a binary diff — git prints `Binary files a/… and b/… differ` (or `Binary
+ * files /dev/null and b/… differ` for a new file) IN THE PATCH TEXT ITSELF, never a text hunk. So
+ * this is the one signal `diff` needs; no separate numstat call to detect it.
+ *
+ * Pure function — no IO — so it can be unit-tested against pinned output without spawning git.
+ */
+export function isBinaryPatch(patch: string): boolean {
+  return patch.includes('Binary files ');
+}
+
+/** 5 MB — the size cap `diff`'s content sides guard against (issue #67). */
+export const DIFF_SIZE_CAP_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Internal sentinel thrown from inside `diff`'s `withGit` callback when a content side exceeds
+ * `DIFF_SIZE_CAP_BYTES` — caught in the method's `GitProcessError` handler and turned into the
+ * typed `FileTooLargeError`, the same "inspect the cause, branch to a different typed error"
+ * pattern as `switchBranch`/`createBranch`.
+ */
+class DiffSizeLimitExceeded extends Error {
+  constructor(
+    readonly path: string,
+    readonly size: number,
+  ) {
+    super(`file too large: ${path} (${size} bytes)`);
+  }
+}
+
+/**
+ * Read one content side for `diff`'s `oldContent`/`newContent` (issue #67): either the Working
+ * tree's disk file (`rev === 'worktree'`) or a committed blob (`git show <rev>:<path>`). Returns
+ * `null` when the side doesn't exist there (an added file has no old side; a deleted file has no
+ * new side; an unborn HEAD has no committed side at all) — git's own "doesn't exist" failure and a
+ * genuinely missing file are indistinguishable and both mean "no content here", so any failure
+ * reading/stat-ing is treated as absence. Throws `DiffSizeLimitExceeded` (caught by the caller) when
+ * the side is over the cap — checked via `stat`/`cat-file -s` BEFORE reading the full content.
+ */
+async function readDiffSide(
+  git: SimpleGit,
+  repoPath: string,
+  rev: 'worktree' | string,
+  path: string,
+): Promise<string | null> {
+  if (rev === 'worktree') {
+    const size = await stat(join(repoPath, path))
+      .then((s) => s.size)
+      .catch(() => null);
+    if (size === null) return null;
+    if (size > DIFF_SIZE_CAP_BYTES) throw new DiffSizeLimitExceeded(path, size);
+    return readFile(join(repoPath, path), 'utf8').catch(() => null);
+  }
+
+  const spec = `${rev}:${path}`;
+  const size = await git
+    .raw(['cat-file', '-s', spec])
+    .then((out) => Number(out.trim()))
+    .catch(() => null);
+  if (size === null) return null;
+  if (size > DIFF_SIZE_CAP_BYTES) throw new DiffSizeLimitExceeded(path, size);
+  return git.raw(['show', spec]).catch(() => null);
+}
+
+/**
+ * Preflight rename detection for `diff` (issue #67): `git diff [--cached] -M -z --name-status
+ * [<base> <sha>]`, WITHOUT a pathspec — a rename can only be detected when both the old and new
+ * paths are in view (a single-pathspec diff shows a rename as a plain add; verified empirically).
+ * Reuses `parseDiffTreeNameStatus` — `git diff --name-status -z` and `git diff-tree --name-status
+ * -z` share the identical NUL-delimited record shape. Returns the pre-rename path, or `undefined`
+ * when `path` isn't a rename target in this diff.
+ */
+async function findOldPath(
+  git: SimpleGit,
+  nameStatusArgs: string[],
+  path: string,
+): Promise<string | undefined> {
+  const out = await git.raw(['diff', ...nameStatusArgs, '-M', '-z', '--name-status']);
+  return parseDiffTreeNameStatus(out).find((entry) => entry.path === path)?.oldPath;
+}
+
+/**
  * Enrich one axis's `StatusChange` with its numstat line counts. A missing change stays missing; a
  * missing/empty (binary) stats lookup leaves `additions`/`deletions` off.
  */
@@ -863,9 +949,11 @@ export class GitClient extends Effect.Service<GitClient>()('@gitoui/core/GitClie
      * scope). `skip`/`limit` default to `0`/`300`. `scope` defaults to `'head'`: `git log HEAD`,
      * date order — today's behavior, untouched. `scope: 'allRefs'` walks
      * `HEAD --branches --remotes --tags` instead of `--all` (which would drag in
-     * `refs/stash`/`refs/notes` — not Refs in the glossary, CONTEXT.md) and adds `--topo-order`,
-     * implied by the scope rather than a separate option: the lane sweep (ADR 0007) requires
-     * strict children-before-parents order, which date order doesn't guarantee under clock skew.
+     * `refs/stash`/`refs/notes` — not Refs in the glossary, CONTEXT.md) and adds `--date-order`,
+     * implied by the scope rather than a separate option: it walks in commit-date order (branches
+     * intermixed) yet still guarantees children before parents — the invariant the lane sweep needs
+     * (ADR 0007). NOT `--topo-order` (would group each branch contiguously, hiding the timeline) and
+     * NOT git's bare default (chronological but no children-before-parents guarantee under clock skew).
      * The walk stays fully local either way — remote-tracking branches are local pointers to
      * already-fetched objects, no network. An empty Repository (unborn HEAD) makes `git log`
      * exit non-zero — git phrases this either as "does not have any commits yet" (bare `git log`)
@@ -885,7 +973,7 @@ export class GitClient extends Effect.Service<GitClient>()('@gitoui/core/GitClie
           ...(scope === 'allRefs' ? ['HEAD', '--branches', '--remotes', '--tags'] : ['HEAD']),
           `--skip=${skip ?? 0}`,
           `--max-count=${limit ?? 300}`,
-          ...(scope === 'allRefs' ? ['--topo-order'] : []),
+          ...(scope === 'allRefs' ? ['--date-order'] : []),
           // Full ref paths in %D — the only way to tell a local Branch `feature/x` from a
           // remote-tracking `origin/main` (see parseRefDecoration).
           '--decorate=full',
@@ -951,5 +1039,106 @@ export class GitClient extends Effect.Service<GitClient>()('@gitoui/core/GitClie
           changes,
         } satisfies CommitDetail;
       }).pipe(Effect.catchTag('GitProcessError', () => new RepoNotFoundError({ path: repoPath }))),
+
+    /**
+     * The Code & Diff view's diff for one path (issue #67, ADR 0008): git's own patch text (the
+     * hunks `@pierre/diffs` renders ARE these hunks) plus full old/new contents.
+     *
+     * `unstaged`/`staged`/`commit` each resolve to a `diffArgsPrefix` (the revs `diff` compares,
+     * before the pathspec): `[]`, `['--cached']`, or `[base, sha]` (root Commit → `EMPTY_TREE_SHA`,
+     * same seam as `commitDetail`). A rename preflight (`findOldPath`) always runs first — a rename
+     * can only be detected with BOTH paths in the pathspec (verified empirically: `-- <path>` alone
+     * shows a renamed file as a plain add), so the actual patch command's pathspec grows to
+     * `[oldPath, path]` when one is found.
+     *
+     * The untracked seam: an unstaged path absent from `git ls-files` isn't in `git diff`'s universe
+     * AT ALL (not even as an empty result) — `git diff --no-index -- /dev/null <path>` renders it as
+     * an all-added file instead. `--no-index` exits 1 whenever a diff exists; simple-git's own error
+     * detection only rejects on a NON-EMPTY stderr (`errorDetectionPlugin`), and this call never
+     * writes to stderr for that case, so the promise already resolves with the patch — no special
+     * exit-code handling needed here.
+     *
+     * `binary` is read straight off the patch text (`isBinaryPatch`) — no separate numstat call.
+     * Content sides are skipped for a binary file (both `null`) and otherwise fetched via
+     * `readDiffSide`: the worktree side from disk, committed sides via `git show <rev>:<path>`,
+     * guarded by the 5 MB cap. Maps `GitProcessError` → `FileTooLargeError` when the cause is a
+     * `DiffSizeLimitExceeded` (same "inspect the cause" pattern as `switchBranch`), else
+     * `RepoNotFoundError`.
+     */
+    diff: (
+      repoPath: string,
+      path: string,
+      source: DiffSource,
+    ): Effect.Effect<Diff, RepoNotFoundError | FileTooLargeError> =>
+      withGit(repoPath, async (git): Promise<Diff> => {
+        if (source.kind === 'unstaged') {
+          const tracked = (await git.raw(['ls-files', '--', path])).trim().length > 0;
+          if (!tracked) {
+            const patch = await git.raw(['diff', '--no-index', '--', '/dev/null', path]);
+            const binary = isBinaryPatch(patch);
+            const newContent = binary ? null : await readDiffSide(git, repoPath, 'worktree', path);
+            return { patch, oldContent: null, newContent, binary } satisfies Diff;
+          }
+
+          const oldPath = await findOldPath(git, [], path);
+          const pathspec = oldPath !== undefined ? [oldPath, path] : [path];
+          const patch = await git.raw(['diff', '-M', '--', ...pathspec]);
+          const binary = isBinaryPatch(patch);
+          const oldContent = binary ? null : await readDiffSide(git, repoPath, '', oldPath ?? path); // index side (`:<path>`)
+          const newContent = binary ? null : await readDiffSide(git, repoPath, 'worktree', path);
+          return {
+            patch,
+            oldContent,
+            newContent,
+            binary,
+            ...(oldPath !== undefined ? { oldPath } : {}),
+          } satisfies Diff;
+        }
+
+        if (source.kind === 'staged') {
+          const oldPath = await findOldPath(git, ['--cached'], path);
+          const pathspec = oldPath !== undefined ? [oldPath, path] : [path];
+          const patch = await git.raw(['diff', '--cached', '-M', '--', ...pathspec]);
+          const binary = isBinaryPatch(patch);
+          const oldContent = binary
+            ? null
+            : await readDiffSide(git, repoPath, 'HEAD', oldPath ?? path);
+          const newContent = binary ? null : await readDiffSide(git, repoPath, '', path); // index side
+          return {
+            patch,
+            oldContent,
+            newContent,
+            binary,
+            ...(oldPath !== undefined ? { oldPath } : {}),
+          } satisfies Diff;
+        }
+
+        // source.kind === 'commit'
+        const parentsRaw = (await git.raw(['log', '-1', '--format=%P', source.sha])).trim();
+        const base = parentsRaw.length === 0 ? EMPTY_TREE_SHA : `${source.sha}^1`;
+        const oldPath = await findOldPath(git, [base, source.sha], path);
+        const pathspec = oldPath !== undefined ? [oldPath, path] : [path];
+        const patch = await git.raw(['diff', base, source.sha, '-M', '--', ...pathspec]);
+        const binary = isBinaryPatch(patch);
+        const oldContent = binary ? null : await readDiffSide(git, repoPath, base, oldPath ?? path);
+        const newContent = binary ? null : await readDiffSide(git, repoPath, source.sha, path);
+        return {
+          patch,
+          oldContent,
+          newContent,
+          binary,
+          ...(oldPath !== undefined ? { oldPath } : {}),
+        } satisfies Diff;
+      }).pipe(
+        Effect.catchTag(
+          'GitProcessError',
+          (e): Effect.Effect<never, RepoNotFoundError | FileTooLargeError> => {
+            if (e.cause instanceof DiffSizeLimitExceeded) {
+              return Effect.fail(new FileTooLargeError({ path: e.cause.path, size: e.cause.size }));
+            }
+            return Effect.fail(new RepoNotFoundError({ path: repoPath }));
+          },
+        ),
+      ),
   },
 }) {}

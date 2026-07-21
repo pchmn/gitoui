@@ -11,6 +11,8 @@ import type {
   CommitInput,
   CommitResult,
   CreateBranchInput,
+  Diff,
+  DiffInput,
   ListCommitsInput,
   RemoteList,
   RepoInput,
@@ -81,6 +83,7 @@ const git = {
     invoke(CHANNELS.git.listCommits, input) as Promise<readonly Commit[]>,
   commitDetail: (input: CommitDetailInput): Promise<CommitDetail> =>
     invoke(CHANNELS.git.commitDetail, input) as Promise<CommitDetail>,
+  diff: (input: DiffInput): Promise<Diff> => invoke(CHANNELS.git.diff, input) as Promise<Diff>,
 };
 
 const desktop = {

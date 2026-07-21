@@ -1,5 +1,6 @@
 import { toast } from '@gitoui/ui/toast';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { diffKey } from '#renderer/modules/diff/hooks/useDiff';
 import type { GitError } from '#renderer/shared/git/errors';
 import { messages } from '#renderer/shared/messages/messages';
 import { matchError } from '#renderer/shared/utils/matchError';
@@ -32,6 +33,7 @@ export function useCommit() {
       if (root === null) return;
       void queryClient.invalidateQueries({ queryKey: statusKey(root) });
       void queryClient.invalidateQueries({ queryKey: commitsKey(root) });
+      void queryClient.invalidateQueries({ queryKey: diffKey(root) });
     },
     onError: (error) => {
       toast.add({

@@ -148,6 +148,26 @@ describe('CommitGraph refs', () => {
     expect(screen.getByText('v2.3.0').getAttribute('data-emphasis')).toBe('quiet');
   });
 
+  it('tints branch pills with their lane color so a name reads as belonging to its line', async () => {
+    const commits = [
+      makeCommit({
+        sha: 'tip',
+        subject: 'the decorated tip',
+        refs: [
+          { _tag: 'Branch', name: 'main', current: true },
+          { _tag: 'Tag', name: 'v2.3.0' },
+        ],
+      }),
+    ];
+    render(<Wrapper listCommitsMock={() => Promise.resolve(commits)} />);
+
+    await screen.findByText('the decorated tip');
+    // The current branch rides HEAD's lane (column 0 → --lane-1); its pill wears that lane color.
+    expect(screen.getByText('main').getAttribute('data-tint')).toBe('var(--lane-1)');
+    // A tag marks a point, not a line — it keeps the neutral pill (no lane tint).
+    expect(screen.getByText('v2.3.0').getAttribute('data-tint')).toBeNull();
+  });
+
   it('renders a non-current branch pill at default emphasis', async () => {
     const commits = [
       makeCommit({ refs: [{ _tag: 'Branch', name: 'feature/pay-fallback', current: false }] }),
@@ -180,9 +200,9 @@ describe('CommitGraph ordering', () => {
   // The TanStack DB collection is keyed by `sha`, so without an explicit `orderBy` rows come out in
   // sha order, not `listCommits`'s order. The lane sweep (ADR 0007) requires strict
   // children-before-parents order, which `listCommits`'s `scope: 'allRefs'` walk already
-  // guarantees (topo order) — so the graph must render in the order the array came back in, not
-  // re-sort by `committedAt` (which the topo walk needn't match, e.g. across clock skew).
-  it('renders commits in listCommits order (topological), not by commit date', async () => {
+  // guarantees (`--date-order`) — so the graph must render in the order the array came back in, not
+  // re-sort by `committedAt` (which that walk needn't match, e.g. across clock skew).
+  it('renders commits in listCommits order (the git walk), not by commit date', async () => {
     const commits = [
       makeCommit({ sha: 'mid', subject: 'the middle one', committedAt: 2_000 }),
       makeCommit({ sha: 'old', subject: 'the oldest one', committedAt: 1_000 }),

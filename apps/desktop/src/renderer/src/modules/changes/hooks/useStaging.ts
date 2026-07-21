@@ -1,6 +1,7 @@
 import type { StatusEntry } from '@gitoui/contracts/git';
 import { toast } from '@gitoui/ui/toast';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { diffKey } from '#renderer/modules/diff/hooks/useDiff';
 import type { GitError } from '#renderer/shared/git/errors';
 import { messages } from '#renderer/shared/messages/messages';
 import { matchError } from '#renderer/shared/utils/matchError';
@@ -43,10 +44,14 @@ export function useStaging() {
   };
 
   // Reconcile the optimistic guess with git's truth (and restore it on failure). Runs on both
-  // success and error via `onSettled`.
+  // success and error via `onSettled`. Also invalidates every open worktree diff for this repo
+  // (issue #67's wiring: staging moves the unstaged/staged boundary, so an open diff on either axis
+  // may now be stale) — `diffKey`'s base prefix reaches commit diffs too, a harmless extra refetch of
+  // otherwise-immutable data.
   const reconcile = () => {
     if (root === null) return;
     void queryClient.invalidateQueries({ queryKey: statusKey(root) });
+    void queryClient.invalidateQueries({ queryKey: diffKey(root) });
   };
 
   // All four share the same error taxonomy (GitCommandError); `title` is the per-action override,

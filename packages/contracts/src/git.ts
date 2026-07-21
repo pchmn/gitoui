@@ -61,6 +61,19 @@ export class GitCommandError extends Schema.TaggedError<GitCommandError>()('GitC
   message: Schema.String,
 }) {}
 
+/**
+ * A `diff`/`fileContent` side exceeded the 5 MB size cap (issue #67) — guards against reading a
+ * huge blob (a vendored binary misdetected as text, a giant generated file) into memory just to
+ * render it. `size` is the offending side's byte size.
+ */
+export class FileTooLargeError extends Schema.TaggedError<FileTooLargeError>()(
+  'FileTooLargeError',
+  {
+    path: Schema.String,
+    size: Schema.Number,
+  },
+) {}
+
 // --- Domain schemas (minimal placeholders — real shapes come with the business logic) ---
 
 export const ChangeKind = Schema.Literal('added', 'modified', 'deleted', 'renamed', 'untracked');
@@ -265,6 +278,44 @@ export const CommitDetailInput = Schema.Struct({
 });
 export type CommitDetailInput = typeof CommitDetailInput.Type;
 
+/**
+ * Which axis of a path's history the Code & Diff view (issue #67) is reading: the dirty Working
+ * tree's Unstaged or Staged side (symmetric with `StatusEntry`'s two axes), or one historical
+ * Commit. A literal `kind` discriminant, like `ChangeKind`/`StatusChange` — not a `Schema.TaggedStruct`
+ * (`_tag`), since this mirrors the renderer's own `CommitSelection` shape one-for-one.
+ */
+export const DiffSource = Schema.Union(
+  Schema.Struct({ kind: Schema.Literal('unstaged') }),
+  Schema.Struct({ kind: Schema.Literal('staged') }),
+  Schema.Struct({ kind: Schema.Literal('commit'), sha: Schema.String }),
+);
+export type DiffSource = typeof DiffSource.Type;
+
+/** Input for `diff`. `RepoInput` has no `path`/`source` fields, so a new struct. */
+export const DiffInput = Schema.Struct({
+  repoPath: Schema.String,
+  path: Schema.String,
+  source: DiffSource,
+});
+export type DiffInput = typeof DiffInput.Type;
+
+/**
+ * The Code & Diff view's contract (issue #67, ADR 0008): carries git's OWN patch text — never a
+ * structure parsed in `core` — so the hunks `@pierre/diffs` renders are git's own hunks. `oldContent`/
+ * `newContent` ride along (worktree side from disk, committed sides via `git show <rev>:<path>`) to
+ * keep the door open for the library's hunk-expansion, null when either side doesn't exist at that
+ * revision (an added/deleted file) or the file is `binary` (never a fake text diff). `oldPath` is set
+ * only for a detected rename.
+ */
+export const Diff = Schema.Struct({
+  patch: Schema.String,
+  oldContent: Schema.NullOr(Schema.String),
+  newContent: Schema.NullOr(Schema.String),
+  binary: Schema.Boolean,
+  oldPath: Schema.optional(Schema.String),
+});
+export type Diff = typeof Diff.Type;
+
 /** Input for `listCommits`. `RepoInput` has no `skip`/`limit` fields, so a new struct. */
 export const ListCommitsInput = Schema.Struct({
   repoPath: Schema.String,
@@ -272,7 +323,7 @@ export const ListCommitsInput = Schema.Struct({
   limit: Schema.optional(Schema.Number),
   /**
    * Which Refs to walk. Absent or `'head'` — today's behavior, HEAD only, date order. `'allRefs'`
-   * — `HEAD --branches --remotes --tags`, `--topo-order` (ADR 0007). A closed literal, not a
+   * — `HEAD --branches --remotes --tags`, `--date-order` (ADR 0007). A closed literal, not a
    * free-form ref list — the renderer never constructs raw git rev arguments.
    */
   scope: Schema.optional(Schema.Literal('head', 'allRefs')),
@@ -437,4 +488,16 @@ export const commitDetail = defineMethod({
   payload: CommitDetailInput,
   success: CommitDetail,
   error: RepoNotFoundError,
+});
+
+/**
+ * The Code & Diff view's diff for one path (issue #67, ADR 0008): unstaged (`git diff`), staged
+ * (`git diff --cached`), or one Commit (`git diff <sha>^1 <sha>`, root Commit against the empty
+ * tree). Fails with `FileTooLargeError` when a content side exceeds the 5 MB cap, `RepoNotFoundError`
+ * for any other failure.
+ */
+export const diff = defineMethod({
+  payload: DiffInput,
+  success: Diff,
+  error: Schema.Union(RepoNotFoundError, FileTooLargeError),
 });

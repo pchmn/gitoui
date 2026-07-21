@@ -6,9 +6,11 @@ import { it } from '@effect/vitest';
 import { Effect } from 'effect';
 import { afterAll, beforeAll, describe, expect } from 'vitest';
 import {
+  DIFF_SIZE_CAP_BYTES,
   extractCommitFailureMessage,
   extractGitMessage,
   GitClient,
+  isBinaryPatch,
   isUnbornHeadError,
   parseCommitLog,
   parseDiffTreeNameStatus,
@@ -1601,6 +1603,224 @@ describe('GitClient.commitDetail', () => {
     Effect.gen(function* () {
       const client = yield* GitClient;
       const error = yield* Effect.flip(client.commitDetail(join(base, 'does-not-exist'), rootSha));
+      expect(error._tag).toBe('RepoNotFoundError');
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+});
+
+// --- isBinaryPatch unit tests (pure, pinned output) ---
+
+describe('isBinaryPatch', () => {
+  it('detects a binary patch against /dev/null (new file)', () => {
+    expect(
+      isBinaryPatch(
+        'diff --git a/bin.dat b/bin.dat\nnew file mode 100644\nindex 0000000..0df5c99\nBinary files /dev/null and b/bin.dat differ\n',
+      ),
+    ).toBe(true);
+  });
+
+  it('detects a binary patch between two commits', () => {
+    expect(
+      isBinaryPatch(
+        'diff --git a/bin.dat b/bin.dat\nindex 0df5c99..bbeba64 100644\nBinary files a/bin.dat and b/bin.dat differ\n',
+      ),
+    ).toBe(true);
+  });
+
+  it('returns false for a plain text patch', () => {
+    expect(
+      isBinaryPatch(
+        'diff --git a/a.txt b/a.txt\nindex ce01362..7898192 100644\n--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-a\n+b\n',
+      ),
+    ).toBe(false);
+  });
+
+  it('returns false for an empty patch', () => {
+    expect(isBinaryPatch('')).toBe(false);
+  });
+});
+
+// --- GitClient.diff (temp repo, pinned against real git output) ---
+
+describe('GitClient.diff', () => {
+  let base: string;
+  let repo: string;
+
+  const g = (cwd: string, ...args: string[]) =>
+    execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+
+  beforeAll(() => {
+    base = realpathSync(mkdtempSync(join(tmpdir(), 'gitoui-diff-')));
+    repo = join(base, 'repo');
+    mkdirSync(repo, { recursive: true });
+    execFileSync('git', ['init', '-q', '-b', 'main', repo], { cwd: base });
+    execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: repo });
+    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: repo });
+  });
+
+  afterAll(() => rmSync(base, { recursive: true, force: true }));
+
+  it.effect('unstaged: a modified tracked file diffs worktree against the index', () =>
+    Effect.gen(function* () {
+      writeFileSync(join(repo, 'a.txt'), 'line1\nline2\n');
+      g(repo, 'add', 'a.txt');
+      g(repo, 'commit', '-m', 'init');
+      writeFileSync(join(repo, 'a.txt'), 'line1\nline2 changed\n');
+
+      const client = yield* GitClient;
+      const result = yield* client.diff(repo, 'a.txt', { kind: 'unstaged' });
+      expect(result.binary).toBe(false);
+      expect(result.patch).toContain('-line2\n+line2 changed');
+      expect(result.oldContent).toBe('line1\nline2\n');
+      expect(result.newContent).toBe('line1\nline2 changed\n');
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('unstaged: an untracked file renders as all-added via the --no-index seam', () =>
+    Effect.gen(function* () {
+      writeFileSync(join(repo, 'untracked.txt'), 'brand new\n');
+
+      const client = yield* GitClient;
+      const result = yield* client.diff(repo, 'untracked.txt', { kind: 'unstaged' });
+      expect(result.binary).toBe(false);
+      expect(result.patch).toContain('new file mode');
+      expect(result.patch).toContain('+brand new');
+      // No deletion line — every content line is an addition.
+      expect(result.patch).not.toMatch(/^-[^-]/m);
+      expect(result.oldContent).toBeNull();
+      expect(result.newContent).toBe('brand new\n');
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('staged: diffs the index against HEAD', () =>
+    Effect.gen(function* () {
+      writeFileSync(join(repo, 'staged.txt'), 'v1\n');
+      g(repo, 'add', 'staged.txt');
+      g(repo, 'commit', '-m', 'v1');
+      writeFileSync(join(repo, 'staged.txt'), 'v2\n');
+      g(repo, 'add', 'staged.txt');
+
+      const client = yield* GitClient;
+      const result = yield* client.diff(repo, 'staged.txt', { kind: 'staged' });
+      expect(result.patch).toContain('-v1\n+v2');
+      expect(result.oldContent).toBe('v1\n');
+      expect(result.newContent).toBe('v2\n');
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('staged: works on an unborn HEAD (index vs the empty tree)', () =>
+    Effect.gen(function* () {
+      const unbornRepo = join(base, 'unborn');
+      mkdirSync(unbornRepo);
+      execFileSync('git', ['init', '-q', '-b', 'main', unbornRepo], { cwd: base });
+      execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: unbornRepo });
+      execFileSync('git', ['config', 'user.name', 'Test'], { cwd: unbornRepo });
+      writeFileSync(join(unbornRepo, 'new.txt'), 'hello\n');
+      g(unbornRepo, 'add', 'new.txt');
+
+      const client = yield* GitClient;
+      const result = yield* client.diff(unbornRepo, 'new.txt', { kind: 'staged' });
+      expect(result.patch).toContain('+hello');
+      expect(result.oldContent).toBeNull();
+      expect(result.newContent).toBe('hello\n');
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('commit: diffs against the first parent', () =>
+    Effect.gen(function* () {
+      writeFileSync(join(repo, 'commit.txt'), 'one\n');
+      g(repo, 'add', 'commit.txt');
+      g(repo, 'commit', '-m', 'one');
+      writeFileSync(join(repo, 'commit.txt'), 'two\n');
+      g(repo, 'add', 'commit.txt');
+      g(repo, 'commit', '-m', 'two');
+      const sha = g(repo, 'rev-parse', 'HEAD');
+
+      const client = yield* GitClient;
+      const result = yield* client.diff(repo, 'commit.txt', { kind: 'commit', sha });
+      expect(result.patch).toContain('-one\n+two');
+      expect(result.oldContent).toBe('one\n');
+      expect(result.newContent).toBe('two\n');
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('commit: a root commit diffs against the empty tree', () =>
+    Effect.gen(function* () {
+      const rootRepo = join(base, 'root-commit');
+      mkdirSync(rootRepo);
+      execFileSync('git', ['init', '-q', '-b', 'main', rootRepo], { cwd: base });
+      execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: rootRepo });
+      execFileSync('git', ['config', 'user.name', 'Test'], { cwd: rootRepo });
+      writeFileSync(join(rootRepo, 'root.txt'), 'root\n');
+      g(rootRepo, 'add', 'root.txt');
+      g(rootRepo, 'commit', '-m', 'root');
+      const sha = g(rootRepo, 'rev-parse', 'HEAD');
+
+      const client = yield* GitClient;
+      const result = yield* client.diff(rootRepo, 'root.txt', { kind: 'commit', sha });
+      expect(result.patch).toContain('+root');
+      expect(result.oldContent).toBeNull();
+      expect(result.newContent).toBe('root\n');
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('commit: a renamed path carries oldPath', () =>
+    Effect.gen(function* () {
+      const renameRepo = join(base, 'rename-commit');
+      mkdirSync(renameRepo);
+      execFileSync('git', ['init', '-q', '-b', 'main', renameRepo], { cwd: base });
+      execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: renameRepo });
+      execFileSync('git', ['config', 'user.name', 'Test'], { cwd: renameRepo });
+      writeFileSync(join(renameRepo, 'old.txt'), 'line1\nline2\nline3\nline4\nline5\n');
+      g(renameRepo, 'add', '-A');
+      g(renameRepo, 'commit', '-m', 'init');
+      g(renameRepo, 'mv', 'old.txt', 'new.txt');
+      execFileSync('sh', ['-c', 'echo line6 >> new.txt'], { cwd: renameRepo });
+      g(renameRepo, 'add', '-A');
+      g(renameRepo, 'commit', '-m', 'rename');
+      const sha = g(renameRepo, 'rev-parse', 'HEAD');
+
+      const client = yield* GitClient;
+      const result = yield* client.diff(renameRepo, 'new.txt', { kind: 'commit', sha });
+      expect(result.oldPath).toBe('old.txt');
+      expect(result.patch).toContain('rename from old.txt');
+      expect(result.patch).toContain('rename to new.txt');
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('marks a binary Change with null contents and no fake text diff', () =>
+    Effect.gen(function* () {
+      writeFileSync(join(repo, 'bin.dat'), Buffer.from([0, 1, 2, 3, 0, 255]));
+
+      const client = yield* GitClient;
+      const result = yield* client.diff(repo, 'bin.dat', { kind: 'unstaged' });
+      expect(result.binary).toBe(true);
+      expect(result.oldContent).toBeNull();
+      expect(result.newContent).toBeNull();
+      expect(result.patch).toContain('Binary files');
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('fails with FileTooLargeError when a content side exceeds the 5 MB cap', () =>
+    Effect.gen(function* () {
+      writeFileSync(join(repo, 'huge.txt'), 'x'.repeat(DIFF_SIZE_CAP_BYTES + 1));
+
+      const client = yield* GitClient;
+      const error = yield* Effect.flip(client.diff(repo, 'huge.txt', { kind: 'unstaged' }));
+      expect(error._tag).toBe('FileTooLargeError');
+      if (error._tag === 'FileTooLargeError') {
+        expect(error.path).toBe('huge.txt');
+        expect(error.size).toBeGreaterThan(DIFF_SIZE_CAP_BYTES);
+      }
+    }).pipe(Effect.provide(GitClient.Default)),
+  );
+
+  it.effect('fails with RepoNotFoundError for a bad repo path', () =>
+    Effect.gen(function* () {
+      const client = yield* GitClient;
+      const error = yield* Effect.flip(
+        client.diff(join(base, 'does-not-exist'), 'a.txt', { kind: 'unstaged' }),
+      );
       expect(error._tag).toBe('RepoNotFoundError');
     }).pipe(Effect.provide(GitClient.Default)),
   );

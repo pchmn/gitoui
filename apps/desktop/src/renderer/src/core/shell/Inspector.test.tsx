@@ -10,6 +10,7 @@ import {
   CommitSelectionProvider,
   useCommitSelection,
 } from '#renderer/modules/commits/CommitSelectionContext';
+import { CenterViewProvider } from '#renderer/modules/diff/CenterViewContext';
 import {
   ActiveRepositoryProvider,
   useActiveRepository,
@@ -172,7 +173,9 @@ function ModeWrapper() {
       <ActiveRepositoryProvider>
         <RootSetter root='/repo' />
         <CommitSelectionProvider>
-          <ModeHarness />
+          <CenterViewProvider>
+            <ModeHarness />
+          </CenterViewProvider>
         </CommitSelectionProvider>
       </ActiveRepositoryProvider>
     </QueryClientProvider>

@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { useEffect } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { CenterViewProvider } from '#renderer/modules/diff/CenterViewContext';
 import {
   ActiveRepositoryProvider,
   useActiveRepository,
@@ -61,7 +62,9 @@ function Wrapper({
     <QueryClientProvider client={queryClient}>
       <ActiveRepositoryProvider>
         <RootSetter root={root} />
-        <ChangesPanel />
+        <CenterViewProvider>
+          <ChangesPanel />
+        </CenterViewProvider>
       </ActiveRepositoryProvider>
     </QueryClientProvider>
   );

@@ -23,6 +23,8 @@ colors:
   lane-3: "oklch(0.450 0.12 170.6)"
   lane-4: "oklch(0.600 0.12 230.6)"
   lane-5: "oklch(0.500 0.12 290.6)"
+  syntax-keyword: "oklch(0.450 0.1050 50.6)"
+  syntax-string: "oklch(0.550 0.0787 90.6)"
 typography:
   heading:
     fontFamily: "DM Sans Variable, sans-serif"
@@ -182,6 +184,20 @@ saturation reserved for actions, state, and the graph.
   *adjacent* lanes ≥0.10 apart, including at the `col % 5` wrap. Lanes are distinguished by
   **lightness + position + ref label**, not hue alone. Runtime tokens are `--lane-1…5` (the shadcn
   `--chart-*` set is not the graph's).
+
+### Code Syntax — the Code & Diff view
+- **Syntax Keyword** (`--syntax-keyword`, `oklch(0.45 0.105 50.6)`) / **Syntax String**
+  (`--syntax-string`, `oklch(0.55 0.0787 90.6)`): the ONLY two accents the Code & Diff view's Shiki
+  theme spends — both source-derived (the Living Tint Rule), lifted in chroma/lightness just enough
+  to read as an accent against the code panel's mostly-Ink/Muted-Ink body. Everything else
+  (constants, functions, parameters, punctuation) falls back to Ink; comments to Muted Ink — a
+  restrained set on purpose (DESIGN §1): syntax highlighting must not turn the code panel into a
+  rainbow that competes with the graph. Dark mode lifts both toward the luminous band
+  (`oklch(0.78 …)` / `oklch(0.75 …)`), mirroring the lane lift.
+- Wired to `@pierre/diffs`'s CSS-variable Shiki theme via `--diffs-token-*` custom properties
+  (`globals.css`) — one theme name serves both light and dark, since the underlying tokens already
+  flip with the `.dark` cascade; additions/deletions in the diff body reuse the fixed `--success`/
+  `--destructive` tokens as low-alpha (`12%`) line backgrounds, never saturated blocks.
 
 ### Semantic
 - **Alert** (`oklch(0.577 0.245 27.325)`): the one fixed, source-independent color — destructive
@@ -361,11 +377,17 @@ persisted across sessions. Min/max keep either side from crowding out the graph.
   recency and working-tree state (a quiet dot for clean / dirty). No color beyond state.
 
 ### Ref pills
-- Branch / tag markers as small `rounded-sm` Micro-text pills on Accent Surface; the active branch
-  and Detached HEAD take a stronger tint. Tiny, quiet, scannable. Fills are always
-  opaque (the strong tint is pre-mixed over the canvas, not a translucent primary): in the graph,
-  hovering a row extends its pills over the lane lines, and a see-through pill would let the
-  lines bleed into the text.
+- Branch / tag markers as small `rounded-sm` Micro-text pills. In the graph, a **Branch /
+  remote-tracking Branch / Detached HEAD pill wears its row's lane color** (an opaque tint over the
+  canvas, its ink-anchored text a deepened shade of the same hue) so a name reads as belonging to
+  its line at a glance — the association the colored lanes exist for, spent where color is spent
+  (the graph, per the Spent Color Rule). *Emphasis* sets how loud the tint is, not its hue: the
+  active Branch and Detached HEAD read **stronger**, remote-tracking Branches **quieter**, other
+  local Branches in between. A **Tag carries no tint** (it marks a point on a line, not a line) and
+  falls back to the neutral Accent / Muted Surface pill. Tiny, quiet, scannable. Fills are always
+  opaque (the tint is pre-mixed over the canvas, never a translucent lane color): hovering a row
+  extends its pills over the lane lines, and a see-through pill would let the lines bleed into the
+  text.
 
 ### Toasts
 The app's transient feedback / error surface, stacked bottom-right. A true overlay, so it earns the

@@ -4,9 +4,10 @@
 
 import type { CommitDetail as CommitDetailData } from '@gitoui/contracts/git';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useEffect } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { CenterViewProvider } from '#renderer/modules/diff/CenterViewContext';
 import {
   ActiveRepositoryProvider,
   useActiveRepository,
@@ -54,7 +55,9 @@ function Wrapper({
     <QueryClientProvider client={queryClient}>
       <ActiveRepositoryProvider>
         <RootSetter root={root} />
-        <CommitDetail sha={sha} />
+        <CenterViewProvider>
+          <CommitDetail sha={sha} />
+        </CenterViewProvider>
       </ActiveRepositoryProvider>
     </QueryClientProvider>
   );
@@ -167,5 +170,52 @@ describe('CommitDetail', () => {
     });
 
     expect(writeText).toHaveBeenCalledWith('deadbeef123456789');
+  });
+
+  it("walks the commit's files with the arrow keys, clamping at the ends", async () => {
+    render(
+      <Wrapper
+        commitDetailMock={() =>
+          Promise.resolve(
+            makeDetail({
+              changes: [
+                { path: 'a.ts', kind: 'modified' },
+                { path: 'b.ts', kind: 'modified' },
+                { path: 'c.ts', kind: 'modified' },
+              ],
+            }),
+          )
+        }
+      />,
+    );
+
+    // The open file drives `aria-selected`, so the selected option tracks arrow navigation. Fire on
+    // the first row throughout — the handler reads the open-file state, not the fired element.
+    const firstRow = (await screen.findByText('a.ts')).closest('[role="option"]') as HTMLElement;
+    await act(async () => {
+      firstRow.click();
+    });
+    expect(screen.getByRole('option', { selected: true }).textContent).toContain('a.ts');
+
+    await act(async () => {
+      fireEvent.keyDown(firstRow, { key: 'ArrowDown' });
+    });
+    expect(screen.getByRole('option', { selected: true }).textContent).toContain('b.ts');
+
+    await act(async () => {
+      fireEvent.keyDown(firstRow, { key: 'ArrowDown' });
+    });
+    expect(screen.getByRole('option', { selected: true }).textContent).toContain('c.ts');
+
+    // ArrowDown from the last file clamps (no wrap).
+    await act(async () => {
+      fireEvent.keyDown(firstRow, { key: 'ArrowDown' });
+    });
+    expect(screen.getByRole('option', { selected: true }).textContent).toContain('c.ts');
+
+    await act(async () => {
+      fireEvent.keyDown(firstRow, { key: 'ArrowUp' });
+    });
+    expect(screen.getByRole('option', { selected: true }).textContent).toContain('b.ts');
   });
 });

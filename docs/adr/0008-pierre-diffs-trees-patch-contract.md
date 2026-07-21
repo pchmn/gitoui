@@ -42,6 +42,21 @@ error, the renderer refetches. No patch text is ever round-tripped from the rend
 - Syntax highlighting arrives with the library (Shiki): no separate highlighter integration. What
   remains ours is a custom Shiki theme emitting the OKLCH token variables (light + dark), specified
   in `DESIGN.md`, so the code panel obeys the source-derived palette and stays restrained.
+- Highlighting runs on the library's worker pool (`DiffWorkerPool` in `DiffBody.tsx`: 2 workers via
+  Vite's `?worker` import, warmed at app launch from `AppShell`): the first render paints plain text
+  synchronously and Shiki colors stream in, so opening a diff never blocks the UI thread. The
+  renderer's `worker.format: 'es'` in `electron.vite.config.ts` exists for this (the worker
+  code-splits). The old main-thread path (shared highlighter preloaded and gated in `DiffBody`)
+  remains the fallback when the pool is absent (tests) or its workers fail to spawn. Diffs carry a
+  content-hash `cacheKey`, so the pool caches highlight results (LRU 100): hovering/focusing a
+  Changes or Commit-detail row pre-highlights it (`useDiffPrimer`), making the first open paint
+  colorized on its first frame instead of flashing plain text for the tokenization round trip.
+- **We carry a one-line patch on `@pierre/diffs`** (`patches/@pierre__diffs@1.2.12.patch`, pnpm
+  `patchedDependencies`): `DiffHunksRenderer.hydrate` claims `highlighted: true` with no result when
+  it adopts already-painted DOM, which under React StrictMode's double-mount (dev) makes the worker
+  response compute `triggerRenderUpdate = false` — first open of a file stayed unhighlighted. The
+  patch scopes `highlighted` to "a highlighted result actually exists". Present in 1.2.12 and
+  1.3.0-beta.11; re-check on every library upgrade and drop the patch once fixed upstream.
 - Hunk expansion on a partial patch is not native to the library; the contents shipped in the
   contract keep that door open but the integration is explicitly future work.
 - Two runtime dependencies from one young vendor (diffs stable, trees beta). Mitigation: both are

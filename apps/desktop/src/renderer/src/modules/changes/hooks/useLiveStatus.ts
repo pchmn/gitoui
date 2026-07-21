@@ -1,6 +1,7 @@
 import type { Status } from '@gitoui/contracts/git';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
+import { diffKey } from '#renderer/modules/diff/hooks/useDiff';
 import { statusKey } from './useStatus';
 
 // Mirrors main's `IpcStreamMsg` (apps/desktop/src/ipc/registry.ts) — the preload's `subscribe`
@@ -37,6 +38,8 @@ export function useLiveStatus(repoPath: string | null): void {
       const msg = raw as WatchStatusMsg;
       if (msg._tag !== 'Event') return;
       queryClient.setQueryData(statusKey(repoPath), [{ ...msg.value, repoPath }]);
+      // An external edit may have changed the file underneath an open worktree diff.
+      void queryClient.invalidateQueries({ queryKey: diffKey(repoPath) });
     });
 
     return unsubscribe;

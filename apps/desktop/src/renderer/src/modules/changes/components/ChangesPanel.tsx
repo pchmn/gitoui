@@ -6,7 +6,9 @@ import {
   CircleDashedIcon,
 } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { useCenterView } from '#renderer/modules/diff/CenterViewContext';
+import { useDiffPrimer } from '#renderer/modules/diff/components/DiffBody';
 import type { GitError } from '#renderer/shared/git/errors';
 import { messages } from '#renderer/shared/messages/messages';
 import { matchError } from '#renderer/shared/utils/matchError';
@@ -15,6 +17,7 @@ import { useStaging } from '../hooks/useStaging';
 import { useStatus } from '../hooks/useStatus';
 import { ChangeRow } from './ChangeRow';
 import { CommitComposer } from './CommitComposer';
+import { changeListArrowNav } from './changeListArrowNav';
 
 /**
  * The Inspector's Changes tab (issue #61; file-level staging #62): Staged and Unstaged groups fed by
@@ -43,6 +46,32 @@ export function ChangesPanel() {
   const { root } = useActiveRepository();
   const { data: status, isLoading, isError, error, retry } = useStatus(root);
   const { stageFile, unstageFile, stageAll, unstageAll } = useStaging();
+  const { open: openDiff, file: openFile } = useCenterView();
+  const primeDiff = useDiffPrimer(root);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // ↑/↓ move the open file to the previous/next Change — Unstaged then Staged as one sequence, both
+  // groups' rows sharing `scrollRef`'s DOM order.
+  const onListKeyDown = changeListArrowNav(
+    scrollRef,
+    ({ path, kind }) =>
+      openFile !== null && openFile.source.kind === kind && openFile.path === path,
+    ({ path, kind }) => {
+      if (kind === 'staged' || kind === 'unstaged') openDiff({ path, source: { kind } });
+    },
+  );
+
+  // Staging folds a path's change onto the other axis (Unstaged→Staged, the reverse for unstaging),
+  // emptying the axis the Code & Diff view was reading. If the open file crosses over, re-target it
+  // to where the same content now lives so the diff keeps showing it instead of going blank. `path`
+  // omitted = a bulk (Stage all / Unstage all) that moves every file on that axis.
+  const followOpenFile = (to: 'staged' | 'unstaged', path?: string) => {
+    if (openFile === null || openFile.source.kind === 'commit') return;
+    const movedFrom = to === 'staged' ? 'unstaged' : 'staged';
+    if (openFile.source.kind !== movedFrom) return;
+    if (path !== undefined && openFile.path !== path) return;
+    openDiff({ path: openFile.path, source: { kind: to } });
+  };
 
   if (root === null) return null;
 
@@ -93,16 +122,20 @@ export function ChangesPanel() {
 
   return (
     <div className='flex min-h-0 flex-1 flex-col'>
-      <div className='min-h-0 flex-1 overflow-y-auto'>
+      <div ref={scrollRef} className='min-h-0 flex-1 overflow-y-auto'>
         <ChangeGroup
           id='unstaged'
+          onListKeyDown={onListKeyDown}
           icon={<CircleDashedIcon weight='duotone' />}
           heading={messages.changesPanel.unstagedHeading}
           count={unstaged.length}
           emptyHint={messages.changesPanel.emptyUnstaged}
           action={{
             label: messages.changesPanel.stageAll,
-            onClick: () => stageAll.mutate(),
+            onClick: () => {
+              stageAll.mutate();
+              followOpenFile('staged');
+            },
             disabled: stageAll.isPending,
           }}
         >
@@ -112,19 +145,30 @@ export function ChangesPanel() {
               path={row.path}
               change={row.change}
               checked={false}
-              onToggle={() => stageFile.mutate(row.path)}
+              navKind='unstaged'
+              selected={openFile?.source.kind === 'unstaged' && openFile.path === row.path}
+              onToggle={() => {
+                stageFile.mutate(row.path);
+                followOpenFile('staged', row.path);
+              }}
+              onOpen={() => openDiff({ path: row.path, source: { kind: 'unstaged' } })}
+              onPrefetch={() => primeDiff(row.path, { kind: 'unstaged' })}
             />
           ))}
         </ChangeGroup>
         <ChangeGroup
           id='staged'
+          onListKeyDown={onListKeyDown}
           icon={<CheckCircleIcon weight='duotone' />}
           heading={messages.changesPanel.stagedHeading}
           count={staged.length}
           emptyHint={messages.changesPanel.emptyStaged}
           action={{
             label: messages.changesPanel.unstageAll,
-            onClick: () => unstageAll.mutate(),
+            onClick: () => {
+              unstageAll.mutate();
+              followOpenFile('unstaged');
+            },
             disabled: unstageAll.isPending,
           }}
         >
@@ -134,7 +178,14 @@ export function ChangesPanel() {
               path={row.path}
               change={row.change}
               checked
-              onToggle={() => unstageFile.mutate(row.path)}
+              navKind='staged'
+              selected={openFile?.source.kind === 'staged' && openFile.path === row.path}
+              onToggle={() => {
+                unstageFile.mutate(row.path);
+                followOpenFile('unstaged', row.path);
+              }}
+              onOpen={() => openDiff({ path: row.path, source: { kind: 'staged' } })}
+              onPrefetch={() => primeDiff(row.path, { kind: 'staged' })}
             />
           ))}
         </ChangeGroup>
@@ -169,6 +220,7 @@ function ChangeGroup({
   count,
   emptyHint,
   action,
+  onListKeyDown,
   children,
 }: {
   id: string;
@@ -177,6 +229,8 @@ function ChangeGroup({
   count: number;
   emptyHint: string;
   action?: { label: string; onClick: () => void; disabled?: boolean };
+  /** Arrow-key handler for the group's listbox — moves the open file across both groups' rows. */
+  onListKeyDown?: (event: { key: string; preventDefault: () => void }) => void;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState<boolean>(() => {
@@ -221,7 +275,12 @@ function ChangeGroup({
         {count === 0 ? (
           <p className='px-3 py-1.5 text-xs text-muted-foreground'>{emptyHint}</p>
         ) : (
-          <div role='listbox' aria-label={heading} className='flex flex-col py-1'>
+          <div
+            role='listbox'
+            aria-label={heading}
+            onKeyDown={onListKeyDown}
+            className='flex flex-col py-1'
+          >
             {children}
           </div>
         )}
