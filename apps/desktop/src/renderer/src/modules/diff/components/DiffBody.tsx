@@ -2,7 +2,6 @@ import type { DiffSource } from '@gitoui/contracts/git';
 import {
   areLanguagesAttached,
   areThemesAttached,
-  DEFAULT_THEMES,
   getFiletypeFromFileName,
   getHighlighterOptions,
   getSharedHighlighter,
@@ -35,7 +34,21 @@ import { diffQueryOptions } from '../hooks/useDiff';
 const DIFF_SURFACE_STYLE = {
   '--diffs-bg': 'var(--background)',
   '--diffs-mixer': 'var(--foreground)',
+  '--diffs-font-family': 'var(--font-mono)',
+  '--diffs-deletion-color-override': 'var(--git-deleted)',
+  '--diffs-addition-color-override': 'var(--git-added)',
+  '--diffs-modified-color-override': 'var(--git-modified)',
 } as CSSProperties;
+
+/**
+ * Syntax theme (add/delete tints + token colors). `themeType` defaults to 'system', so dark/light
+ * track the app's `.dark` class (mapped from `color-scheme` in globals.css).
+ *
+ * MUST be fed to BOTH the worker pool (`DiffWorkerPool`'s `highlighterOptions`) AND the fallback
+ * highlighter gate below — with a live pool the renderer takes the theme from the pool's
+ * construction-time options and IGNORES `FileDiff`'s own `theme` prop. Change it in one place here.
+ */
+const DIFF_THEME = { dark: 'everforest-dark', light: 'everforest-light' } as const;
 
 /**
  * The wrapper around `@pierre/diffs` (ADR 0008; issue #67) — the ONLY place the library is imported,
@@ -47,15 +60,16 @@ const DIFF_SURFACE_STYLE = {
  * contract ships `oldContent`/`newContent` for exactly this (see its doc comment). Trade-off: the
  * hunks are the library's recomputation of the diff, not git's own patch hunks.
  *
- * Uses the library's DEFAULT theme (`pierre-light`/`pierre-dark`) for syntax + add/delete tints;
- * plating the rest of our OKLCH tokens onto it is a deliberate second step (see globals.css note).
- * The one token already plated is the surface background (`DIFF_SURFACE_STYLE`), so the diff sits
- * flush on the app canvas. `diffIndicators: 'classic'` = the `+`/`−` gutter (DESIGN.md §5), colored
- * from the default theme's own add/delete bases. `disableFileHeader` drops the library's own
- * filename bar — `CodeDiffView` already renders the header (path + stats).
+ * Syntax + add/delete tints come from `DIFF_THEME`; plating the rest of our OKLCH tokens onto it is
+ * a deliberate second step (see globals.css note). The one token already plated is the surface
+ * background (`DIFF_SURFACE_STYLE`), so the diff sits flush on the app canvas. `diffIndicators:
+ * 'classic'` = the `+`/`−` gutter (DESIGN.md §5), colored from the theme's own add/delete bases.
+ * `disableFileHeader` drops the library's own filename bar — `CodeDiffView` already renders the
+ * header (path + stats). `theme` here only takes effect on the pool-less fallback path; the live
+ * pool is themed via `DiffWorkerPool` (see `DIFF_THEME`).
  *
- * The default theme is `themeType: 'system'` — it follows the CSS `color-scheme`, which our scoped
- * rule in globals.css maps to the app's `.dark` class so light/dark tracks the app, not the OS.
+ * `themeType` defaults to 'system' — it follows the CSS `color-scheme`, which our scoped rule in
+ * globals.css maps to the app's `.dark` class so light/dark tracks the app, not the OS.
  *
  * Highlighting runs on the library's worker pool (`DiffWorkerPool`): with a working pool the first
  * render paints PLAIN text synchronously and Shiki colors stream in from the workers, so opening a
@@ -98,7 +112,12 @@ export function DiffBody({
     <FileDiff
       fileDiff={fileDiff}
       disableWorkerPool={pool === 'unavailable'}
-      options={{ diffStyle, diffIndicators: 'classic', disableFileHeader: true }}
+      options={{
+        diffStyle,
+        diffIndicators: 'classic',
+        disableFileHeader: true,
+        theme: DIFF_THEME,
+      }}
       style={DIFF_SURFACE_STYLE}
     />
   );
@@ -174,7 +193,7 @@ export function DiffWorkerPool({ children }: { children: ReactNode }) {
   return (
     <WorkerPoolContextProvider
       poolOptions={{ workerFactory: () => new DiffsHighlightWorker(), poolSize: 2 }}
-      highlighterOptions={{}}
+      highlighterOptions={{ theme: DIFF_THEME }}
     >
       <WarmWorkerPool />
       {children}
@@ -248,13 +267,13 @@ function useWorkerPoolState(): 'ready' | 'warming' | 'unavailable' {
  */
 function useHighlighterReady(lang: string, enabled: boolean): boolean {
   const ready =
-    isHighlighterLoaded() && areThemesAttached(DEFAULT_THEMES) && areLanguagesAttached(lang);
+    isHighlighterLoaded() && areThemesAttached(DIFF_THEME) && areLanguagesAttached(lang);
   const [, reevaluate] = useState(0);
 
   useEffect(() => {
     if (!enabled || ready) return;
     let cancelled = false;
-    getSharedHighlighter(getHighlighterOptions(lang, {})).then(
+    getSharedHighlighter(getHighlighterOptions(lang, { theme: DIFF_THEME })).then(
       () => {
         if (!cancelled) reevaluate((n) => n + 1);
       },
