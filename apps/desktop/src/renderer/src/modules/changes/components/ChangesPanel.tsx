@@ -17,6 +17,7 @@ import { useStaging } from '../hooks/useStaging';
 import { useStatus } from '../hooks/useStatus';
 import { ChangeRow } from './ChangeRow';
 import { CommitComposer } from './CommitComposer';
+import { changeListArrowNav } from './changeListArrowNav';
 
 /**
  * The Inspector's Changes tab (issue #61; file-level staging #62): Staged and Unstaged groups fed by
@@ -49,39 +50,16 @@ export function ChangesPanel() {
   const primeDiff = useDiffPrimer(root);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // ↑/↓ move the open file to the previous/next Change — Unstaged then Staged as one sequence.
-  // Reads the rows in DOM order (a collapsed group contributes none) so the target is always a
-  // visible, focusable row; both ends clamp, no wrap. Mirrors CommitGraph's selection-driven nav.
-  function moveOpenFile(direction: 1 | -1) {
-    const container = scrollRef.current;
-    if (container === null || openFile === null || openFile.source.kind === 'commit') return;
-    const rows = Array.from(container.querySelectorAll<HTMLElement>('[data-change-path]'));
-    const current = rows.findIndex(
-      (row) =>
-        row.dataset.changeKind === openFile.source.kind && row.dataset.changePath === openFile.path,
-    );
-    if (current < 0) return;
-    const target = rows[current + direction];
-    const kind = target?.dataset.changeKind;
-    const path = target?.dataset.changePath;
-    if ((kind !== 'staged' && kind !== 'unstaged') || path === undefined) return;
-    openDiff({ path, source: { kind } });
-    // The row is already mounted and survives the re-open, so focus it next frame to move the ring
-    // and reveal it — keeping the following arrow on the list.
-    requestAnimationFrame(() => target?.focus());
-  }
-
-  // Structural param (like CommitGraph's) so one handler fits a div's `onKeyDown` without importing
-  // React's event type; `preventDefault` stops the list's native scroll.
-  const onListKeyDown = (event: { key: string; preventDefault: () => void }) => {
-    if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      moveOpenFile(1);
-    } else if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      moveOpenFile(-1);
-    }
-  };
+  // ↑/↓ move the open file to the previous/next Change — Unstaged then Staged as one sequence, both
+  // groups' rows sharing `scrollRef`'s DOM order.
+  const onListKeyDown = changeListArrowNav(
+    scrollRef,
+    ({ path, kind }) =>
+      openFile !== null && openFile.source.kind === kind && openFile.path === path,
+    ({ path, kind }) => {
+      if (kind === 'staged' || kind === 'unstaged') openDiff({ path, source: { kind } });
+    },
+  );
 
   // Staging folds a path's change onto the other axis (Unstaged→Staged, the reverse for unstaging),
   // emptying the axis the Code & Diff view was reading. If the open file crosses over, re-target it

@@ -74,7 +74,7 @@ export function ChangeRow({
         }
       }}
       className={cn(
-        'group relative flex h-7 shrink-0 cursor-default select-none items-center gap-2 rounded-sm px-3 outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-inset',
+        'group relative flex h-7 shrink-0 cursor-default select-none items-center gap-2 px-3 outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-inset',
         selected ? 'bg-accent' : 'hover:bg-muted focus-within:bg-muted',
       )}
       title={path}

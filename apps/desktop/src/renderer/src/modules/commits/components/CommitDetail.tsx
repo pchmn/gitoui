@@ -1,7 +1,8 @@
 import type { CommitDetail as CommitDetailData } from '@gitoui/contracts/git';
 import { CheckIcon, CopyIcon } from '@phosphor-icons/react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ChangeRow } from '#renderer/modules/changes/components/ChangeRow';
+import { changeListArrowNav } from '#renderer/modules/changes/components/changeListArrowNav';
 import { useCenterView } from '#renderer/modules/diff/CenterViewContext';
 import { useDiffPrimer } from '#renderer/modules/diff/components/DiffBody';
 import { useActiveRepository } from '#renderer/modules/repository/ActiveRepositoryContext';
@@ -89,8 +90,21 @@ export function CommitDetail({ sha }: { sha: string }) {
  */
 function CommitDetailBody({ data }: { data: CommitDetailData }) {
   const { root } = useActiveRepository();
-  const { open: openDiff } = useCenterView();
+  const { open: openDiff, file: openFile } = useCenterView();
   const primeDiff = useDiffPrimer(root);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // ↑/↓ walk this Commit's Changes — matched by path (the list is one Commit's files, so the sha is
+  // constant) and re-opened against the same commit source.
+  const onListKeyDown = changeListArrowNav(
+    listRef,
+    ({ path }) =>
+      openFile?.source.kind === 'commit' &&
+      openFile.source.sha === data.sha &&
+      openFile.path === path,
+    ({ path }) => openDiff({ path, source: { kind: 'commit', sha: data.sha } }),
+  );
+
   const newline = data.message.indexOf('\n');
   const subject = newline === -1 ? data.message : data.message.slice(0, newline);
   const body = newline === -1 ? '' : data.message.slice(newline).trimStart();
@@ -122,8 +136,10 @@ function CommitDetailBody({ data }: { data: CommitDetailData }) {
         </span>
       </div>
       <div
+        ref={listRef}
         role='listbox'
         aria-label={messages.commitDetail.changesHeading}
+        onKeyDown={onListKeyDown}
         className='flex min-h-0 flex-1 flex-col overflow-y-auto py-1'
       >
         {data.changes.map((change) => (
@@ -131,6 +147,11 @@ function CommitDetailBody({ data }: { data: CommitDetailData }) {
             key={change.path}
             path={change.path}
             change={change}
+            selected={
+              openFile?.source.kind === 'commit' &&
+              openFile.source.sha === data.sha &&
+              openFile.path === change.path
+            }
             onOpen={() =>
               openDiff({ path: change.path, source: { kind: 'commit', sha: data.sha } })
             }
