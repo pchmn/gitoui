@@ -27,6 +27,8 @@ export function ChangeRow({
   path,
   change,
   checked,
+  selected,
+  navKind,
   onToggle,
   onOpen,
   onPrefetch,
@@ -35,6 +37,10 @@ export function ChangeRow({
   change: StatusChange;
   /** Whether this axis is Staged — drives the action affordance (`−`/unstage vs `+`/stage). Ignored (and unused) when `onToggle` is omitted. */
   checked?: boolean;
+  /** Marks this row as the one currently open in the Code & Diff view — Accent-Surface fill + `aria-selected`. */
+  selected?: boolean;
+  /** This row's axis, tagged onto the DOM so arrow-key navigation can find and focus the target row. */
+  navKind?: 'staged' | 'unstaged';
   /** Toggle staging for this path (stage when currently unchecked, unstage when checked). Omit for a read-only row (Commit detail). */
   onToggle?: () => void;
   /** Open this row's diff in the Code & Diff view. Omit to keep the row inert. */
@@ -55,6 +61,9 @@ export function ChangeRow({
     <div
       role='option'
       tabIndex={0}
+      aria-selected={selected}
+      data-change-path={path}
+      data-change-kind={navKind}
       onClick={onOpen}
       onMouseEnter={onPrefetch}
       onFocus={onPrefetch}
@@ -64,7 +73,10 @@ export function ChangeRow({
           onOpen();
         }
       }}
-      className='group relative flex h-7 shrink-0 cursor-default select-none items-center gap-2 rounded-sm px-3 hover:bg-muted focus-within:bg-muted'
+      className={cn(
+        'group relative flex h-7 shrink-0 cursor-default select-none items-center gap-2 rounded-sm px-3 outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-inset',
+        selected ? 'bg-accent' : 'hover:bg-muted focus-within:bg-muted',
+      )}
       title={path}
     >
       <FilePath path={path} className='flex-1 text-sm' />

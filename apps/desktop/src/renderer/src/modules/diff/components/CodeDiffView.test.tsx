@@ -4,7 +4,7 @@
 
 import type { Diff, Status, StatusEntry } from '@gitoui/contracts/git';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useEffect } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ChangesPanel } from '#renderer/modules/changes/components/ChangesPanel';
@@ -192,6 +192,51 @@ describe('Code & Diff view wiring', () => {
     });
 
     expect((await screen.findByTestId('diff-body')).getAttribute('data-diffstyle')).toBe('split');
+  });
+
+  it('walks files with the arrow keys across the Unstaged/Staged groups, clamping at the ends', async () => {
+    // `u.txt` lives only in Unstaged, `s.txt` only in Staged — so `data-path` alone tells us which
+    // row (and axis) the arrow landed on. The nav sequence is Unstaged then Staged, one list.
+    render(
+      <Wrapper
+        entries={[
+          { path: 'u.txt', unstaged: { kind: 'modified' } },
+          { path: 's.txt', staged: { kind: 'modified' } },
+        ]}
+      />,
+    );
+
+    const unstagedRow = (await screen.findByText('u.txt')).closest(
+      '[role="option"]',
+    ) as HTMLElement;
+    await act(async () => {
+      unstagedRow.click();
+    });
+    expect((await screen.findByTestId('diff-body')).getAttribute('data-path')).toBe('u.txt');
+
+    // The handler is driven by the open-file state, not the fired element, so keying any row in the
+    // list drives the whole sequence — fire on the stable Unstaged row throughout.
+    // ArrowDown crosses from the last Unstaged row into the first Staged row.
+    await act(async () => {
+      fireEvent.keyDown(unstagedRow, { key: 'ArrowDown' });
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId('diff-body').getAttribute('data-path')).toBe('s.txt'),
+    );
+
+    // ArrowDown from the last row clamps (no wrap).
+    await act(async () => {
+      fireEvent.keyDown(unstagedRow, { key: 'ArrowDown' });
+    });
+    expect(screen.getByTestId('diff-body').getAttribute('data-path')).toBe('s.txt');
+
+    // ArrowUp walks back into the Unstaged group.
+    await act(async () => {
+      fireEvent.keyDown(unstagedRow, { key: 'ArrowUp' });
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId('diff-body').getAttribute('data-path')).toBe('u.txt'),
+    );
   });
 
   it('closes via the header × button', async () => {

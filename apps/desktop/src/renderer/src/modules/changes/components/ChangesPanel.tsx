@@ -6,7 +6,7 @@ import {
   CircleDashedIcon,
 } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useCenterView } from '#renderer/modules/diff/CenterViewContext';
 import { useDiffPrimer } from '#renderer/modules/diff/components/DiffBody';
 import type { GitError } from '#renderer/shared/git/errors';
@@ -47,6 +47,41 @@ export function ChangesPanel() {
   const { stageFile, unstageFile, stageAll, unstageAll } = useStaging();
   const { open: openDiff, file: openFile } = useCenterView();
   const primeDiff = useDiffPrimer(root);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // ↑/↓ move the open file to the previous/next Change — Unstaged then Staged as one sequence.
+  // Reads the rows in DOM order (a collapsed group contributes none) so the target is always a
+  // visible, focusable row; both ends clamp, no wrap. Mirrors CommitGraph's selection-driven nav.
+  function moveOpenFile(direction: 1 | -1) {
+    const container = scrollRef.current;
+    if (container === null || openFile === null || openFile.source.kind === 'commit') return;
+    const rows = Array.from(container.querySelectorAll<HTMLElement>('[data-change-path]'));
+    const current = rows.findIndex(
+      (row) =>
+        row.dataset.changeKind === openFile.source.kind && row.dataset.changePath === openFile.path,
+    );
+    if (current < 0) return;
+    const target = rows[current + direction];
+    const kind = target?.dataset.changeKind;
+    const path = target?.dataset.changePath;
+    if ((kind !== 'staged' && kind !== 'unstaged') || path === undefined) return;
+    openDiff({ path, source: { kind } });
+    // The row is already mounted and survives the re-open, so focus it next frame to move the ring
+    // and reveal it — keeping the following arrow on the list.
+    requestAnimationFrame(() => target?.focus());
+  }
+
+  // Structural param (like CommitGraph's) so one handler fits a div's `onKeyDown` without importing
+  // React's event type; `preventDefault` stops the list's native scroll.
+  const onListKeyDown = (event: { key: string; preventDefault: () => void }) => {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      moveOpenFile(1);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      moveOpenFile(-1);
+    }
+  };
 
   // Staging folds a path's change onto the other axis (Unstaged→Staged, the reverse for unstaging),
   // emptying the axis the Code & Diff view was reading. If the open file crosses over, re-target it
@@ -109,9 +144,10 @@ export function ChangesPanel() {
 
   return (
     <div className='flex min-h-0 flex-1 flex-col'>
-      <div className='min-h-0 flex-1 overflow-y-auto'>
+      <div ref={scrollRef} className='min-h-0 flex-1 overflow-y-auto'>
         <ChangeGroup
           id='unstaged'
+          onListKeyDown={onListKeyDown}
           icon={<CircleDashedIcon weight='duotone' />}
           heading={messages.changesPanel.unstagedHeading}
           count={unstaged.length}
@@ -131,6 +167,8 @@ export function ChangesPanel() {
               path={row.path}
               change={row.change}
               checked={false}
+              navKind='unstaged'
+              selected={openFile?.source.kind === 'unstaged' && openFile.path === row.path}
               onToggle={() => {
                 stageFile.mutate(row.path);
                 followOpenFile('staged', row.path);
@@ -142,6 +180,7 @@ export function ChangesPanel() {
         </ChangeGroup>
         <ChangeGroup
           id='staged'
+          onListKeyDown={onListKeyDown}
           icon={<CheckCircleIcon weight='duotone' />}
           heading={messages.changesPanel.stagedHeading}
           count={staged.length}
@@ -161,6 +200,8 @@ export function ChangesPanel() {
               path={row.path}
               change={row.change}
               checked
+              navKind='staged'
+              selected={openFile?.source.kind === 'staged' && openFile.path === row.path}
               onToggle={() => {
                 unstageFile.mutate(row.path);
                 followOpenFile('unstaged', row.path);
@@ -201,6 +242,7 @@ function ChangeGroup({
   count,
   emptyHint,
   action,
+  onListKeyDown,
   children,
 }: {
   id: string;
@@ -209,6 +251,8 @@ function ChangeGroup({
   count: number;
   emptyHint: string;
   action?: { label: string; onClick: () => void; disabled?: boolean };
+  /** Arrow-key handler for the group's listbox — moves the open file across both groups' rows. */
+  onListKeyDown?: (event: { key: string; preventDefault: () => void }) => void;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState<boolean>(() => {
@@ -253,7 +297,12 @@ function ChangeGroup({
         {count === 0 ? (
           <p className='px-3 py-1.5 text-xs text-muted-foreground'>{emptyHint}</p>
         ) : (
-          <div role='listbox' aria-label={heading} className='flex flex-col py-1'>
+          <div
+            role='listbox'
+            aria-label={heading}
+            onKeyDown={onListKeyDown}
+            className='flex flex-col py-1'
+          >
             {children}
           </div>
         )}
